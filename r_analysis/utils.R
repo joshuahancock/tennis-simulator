@@ -143,8 +143,11 @@ ALL_FEATURES <- c(
   # Net play - serve & volley
   "snv_rate", "snv_success_pct", "snv_winner_pct",
 
-  # Net play - approach shots (mid-rally)
+  # Net play - approach shots (all)
   "approach_rate", "approach_success_pct", "approach_winner_pct",
+
+  # Net play - mid-rally approaches only (excludes serve+1)
+  "rally_approach_rate", "rally_approach_success_pct", "rally_approach_winner_pct",
 
   # Rally length - point distribution
   "rally_short_pct", "rally_med_pct", "rally_medlong_pct", "rally_long_pct",
@@ -178,12 +181,13 @@ BASELINE_FEATURES <- c(
   "net_approach_rate", "net_win_pct"
 )
 
-# Net play features (26)
+# Net play features (29)
 NET_PLAY_FEATURES <- c(
   BASELINE_FEATURES,
   "net_winner_pct", "net_forced_error_pct", "passed_at_net_pct",
   "snv_rate", "snv_success_pct", "snv_winner_pct",
-  "approach_rate", "approach_success_pct", "approach_winner_pct"
+  "approach_rate", "approach_success_pct", "approach_winner_pct",
+  "rally_approach_rate", "rally_approach_success_pct", "rally_approach_winner_pct"
 )
 
 # Rally features (34)

@@ -189,6 +189,19 @@ charting_approach_totals <- charting_net %>%
     .groups = "drop"
   )
 
+# Process mid-rally approaches only (excludes serve+1 / serve-and-volley)
+charting_rally_approach_totals <- charting_net %>%
+  filter(row == "ApproachRallies") %>%
+  group_by(match_id, player) %>%
+  summarize(
+    rally_approach_pts = sum(net_pts, na.rm = TRUE),
+    rally_approach_won = sum(pts_won, na.rm = TRUE),
+    rally_approach_winner = sum(net_winner, na.rm = TRUE),
+    rally_approach_forced = sum(induced_forced, na.rm = TRUE),
+    rally_approach_passed = sum(passed_at_net, na.rm = TRUE),
+    .groups = "drop"
+  )
+
 # Process serve & volley stats - aggregate duplicates
 charting_snv_totals <- charting_snv %>%
   filter(row == "SnV") %>%
@@ -354,6 +367,7 @@ charting_player_match <- charting_overview_totals %>%
   left_join(charting_matches, by = "match_id") %>%
   left_join(charting_net_totals, by = c("match_id", "player")) %>%
   left_join(charting_approach_totals, by = c("match_id", "player")) %>%
+  left_join(charting_rally_approach_totals, by = c("match_id", "player")) %>%
   left_join(charting_snv_totals, by = c("match_id", "player")) %>%
   left_join(charting_rally_totals, by = c("match_id", "player")) %>%
   left_join(charting_shot_types_totals, by = c("match_id", "player")) %>%
@@ -405,6 +419,11 @@ charting_player_year <- charting_player_match %>%
     total_approach_winner = sum(approach_winner, na.rm = TRUE),
     total_approach_forced = sum(approach_forced, na.rm = TRUE),
     total_approach_passed = sum(approach_passed, na.rm = TRUE),
+
+    # Net play - mid-rally approaches only (excludes serve+1)
+    total_rally_approach_pts = sum(rally_approach_pts, na.rm = TRUE),
+    total_rally_approach_won = sum(rally_approach_won, na.rm = TRUE),
+    total_rally_approach_winner = sum(rally_approach_winner, na.rm = TRUE),
 
     # Net play - serve & volley
     total_snv_pts = sum(snv_pts, na.rm = TRUE),
@@ -536,6 +555,11 @@ charting_features <- charting_features %>%
     approach_rate = total_approach_pts / (total_serve_pts + total_return_pts + 0.1),
     approach_success_pct = total_approach_won / (total_approach_pts + 0.1),
     approach_winner_pct = total_approach_winner / (total_approach_pts + 0.1),
+
+    # Net play - mid-rally approaches only (excludes serve+1)
+    rally_approach_rate = total_rally_approach_pts / (total_serve_pts + total_return_pts + 0.1),
+    rally_approach_success_pct = total_rally_approach_won / (total_rally_approach_pts + 0.1),
+    rally_approach_winner_pct = total_rally_approach_winner / (total_rally_approach_pts + 0.1),
 
     # Aggression metrics
     winners_per_shot = total_winners / (total_shots + 0.1),
