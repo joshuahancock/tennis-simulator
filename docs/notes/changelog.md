@@ -54,3 +54,51 @@ Replace hardcoded tour averages (0.35, 0.50) with similarity-based averages when
 - Changed `MIN_TOTAL_MATCHES` default from 10 to 20 (based on threshold analysis showing improved ROI)
 
 ---
+
+## 2026-02-04 - Referee 2 Response (Round 1)
+
+### Context
+Referee 2 audit completed with verdict "Major Revisions". Addressed all major concerns except cross-language verification (delegated back to Referee 2).
+
+### Changes Made
+
+**01_mc_engine.R:**
+- Added `DEFAULT_TOUR_AVG_RETURN_VS_FIRST` and `DEFAULT_TOUR_AVG_RETURN_VS_SECOND` constants
+- Updated `simulate_point()` to accept `tour_avg_return_vs_first` and `tour_avg_return_vs_second` parameters
+- Updated `simulate_game()`, `simulate_tiebreak()`, `simulate_set()`, `simulate_match()` to pass tour averages through call chain
+- Removed hardcoded 0.35 and 0.50 values - now calculated from stats_db or passed explicitly
+
+**03_match_probability.R:**
+- Added `tour_avg_return_vs_first` and `tour_avg_return_vs_second` parameters
+- Calculates tour averages from `stats_db$tour_avg_surface` or `stats_db$tour_avg_overall` if not provided
+- Passes tour averages to `simulate_match()`
+- Returns tour averages used in result object
+
+**06_backtest.R:**
+- Added `RANDOM_SEED <- 20260204` configuration constant
+- Added `seed` parameter to `backtest_period()` with default from RANDOM_SEED
+- Added `set.seed(seed)` call at start of `backtest_period()` for reproducibility
+- Added `seed` to return value for documentation
+- Added `bootstrap_roi_ci()` function for ROI confidence intervals (1000 bootstrap samples)
+- Updated `simulate_betting()` to include `roi_ci_lower` and `roi_ci_upper` in output
+- Updated `analyze_backtest()` output to show ROI with 95% CI
+- Updated `compare_models_backtest()` to accept and pass `seed` parameter
+
+**New files created:**
+- `code/run_analysis.R` - Master script to run full pipeline
+- `code/README.md` - Replication instructions
+- `code/setup_renv.R` - Script to initialize renv dependency management
+
+### Referee 2 Concerns Addressed
+
+| Concern | Status | Notes |
+|---------|--------|-------|
+| No random seeds | FIXED | Added `set.seed()` with configurable seed |
+| Hardcoded tour averages | FIXED | Now calculated from stats_db |
+| No master script | FIXED | Created `code/run_analysis.R` |
+| ROI without confidence intervals | FIXED | Added bootstrap CIs |
+| No renv.lock | PARTIAL | Created setup script; user must run it |
+| No code/README.md | FIXED | Created with full instructions |
+| Python-R verification | DELEGATED | Referee 2 will verify with fixed seeds |
+
+---

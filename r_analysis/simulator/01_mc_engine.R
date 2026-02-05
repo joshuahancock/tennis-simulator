@@ -13,6 +13,11 @@
 # Set to FALSE to disable the opponent-based adjustment (uses raw serve stats only)
 USE_OPPONENT_ADJUSTMENT <- TRUE
 
+# Default tour averages (used when not passed explicitly)
+# These should be calculated from data and passed to functions for production use
+DEFAULT_TOUR_AVG_RETURN_VS_FIRST <- 0.35
+DEFAULT_TOUR_AVG_RETURN_VS_SECOND <- 0.50
+
 #' Simulate a single point
 #' @param server_stats List with serve statistics (first_in_pct, first_won_pct,
 #'                     second_won_pct, ace_pct, df_pct)
@@ -20,11 +25,23 @@ USE_OPPONENT_ADJUSTMENT <- TRUE
 #'                       If NULL, uses server stats only
 #' @param use_adjustment Whether to adjust serve win probability based on returner stats.
 #'                       If NULL, uses global USE_OPPONENT_ADJUSTMENT setting.
+#' @param tour_avg_return_vs_first Tour average return % vs first serve (default from global)
+#' @param tour_avg_return_vs_second Tour average return % vs second serve (default from global)
 #' @return List with winner (1 = server, 0 = returner), point_type, and details
-simulate_point <- function(server_stats, returner_stats = NULL, use_adjustment = NULL) {
+simulate_point <- function(server_stats, returner_stats = NULL, use_adjustment = NULL,
+                           tour_avg_return_vs_first = NULL,
+                           tour_avg_return_vs_second = NULL) {
   # Determine whether to use adjustment
   if (is.null(use_adjustment)) {
     use_adjustment <- USE_OPPONENT_ADJUSTMENT
+  }
+
+  # Use defaults if tour averages not provided
+  if (is.null(tour_avg_return_vs_first)) {
+    tour_avg_return_vs_first <- DEFAULT_TOUR_AVG_RETURN_VS_FIRST
+  }
+  if (is.null(tour_avg_return_vs_second)) {
+    tour_avg_return_vs_second <- DEFAULT_TOUR_AVG_RETURN_VS_SECOND
   }
 
   # First serve in?
@@ -42,8 +59,7 @@ simulate_point <- function(server_stats, returner_stats = NULL, use_adjustment =
     if (use_adjustment && !is.null(returner_stats) && !is.null(returner_stats$return_vs_first)) {
       # Adjust server's first serve win % based on returner's return ability
       # Server wins at: server_first_won - (avg_return_vs_first - returner_return_vs_first)
-      avg_return_vs_first <- 0.35  # Tour average return % vs first serve
-      adjustment <- avg_return_vs_first - returner_stats$return_vs_first
+      adjustment <- tour_avg_return_vs_first - returner_stats$return_vs_first
       win_prob <- server_stats$first_won_pct + adjustment
       win_prob <- pmax(0.3, pmin(0.95, win_prob))  # Clamp to reasonable range
     } else {
@@ -65,8 +81,7 @@ simulate_point <- function(server_stats, returner_stats = NULL, use_adjustment =
     # Calculate win probability on second serve
     if (use_adjustment && !is.null(returner_stats) && !is.null(returner_stats$return_vs_second)) {
       # Adjust based on returner's return ability
-      avg_return_vs_second <- 0.50  # Tour average return % vs second serve
-      adjustment <- avg_return_vs_second - returner_stats$return_vs_second
+      adjustment <- tour_avg_return_vs_second - returner_stats$return_vs_second
       win_prob <- server_stats$second_won_pct + adjustment
       win_prob <- pmax(0.2, pmin(0.85, win_prob))
     } else {
@@ -88,16 +103,21 @@ simulate_point <- function(server_stats, returner_stats = NULL, use_adjustment =
 #' @param returner_stats Returning player's statistics
 #' @param log_points Whether to log individual points
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
+#' @param tour_avg_return_vs_first Tour average return % vs first serve
+#' @param tour_avg_return_vs_second Tour average return % vs second serve
 #' @return List with winner (1 = server, 0 = returner), score, and optionally points log
 simulate_game <- function(server_stats, returner_stats = NULL, log_points = FALSE,
-                          use_adjustment = NULL) {
+                          use_adjustment = NULL,
+                          tour_avg_return_vs_first = NULL,
+                          tour_avg_return_vs_second = NULL) {
   # Points: 0, 15, 30, 40, AD
   server_points <- 0
   returner_points <- 0
   points_log <- list()
 
   while (TRUE) {
-    point_result <- simulate_point(server_stats, returner_stats, use_adjustment)
+    point_result <- simulate_point(server_stats, returner_stats, use_adjustment,
+                                   tour_avg_return_vs_first, tour_avg_return_vs_second)
 
     if (log_points) {
       points_log <- append(points_log, list(point_result))
@@ -127,9 +147,13 @@ simulate_game <- function(server_stats, returner_stats = NULL, log_points = FALS
 #' @param to_points Points needed to win (7 for normal tiebreak, 10 for super tiebreak)
 #' @param log_points Whether to log individual points
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
+#' @param tour_avg_return_vs_first Tour average return % vs first serve
+#' @param tour_avg_return_vs_second Tour average return % vs second serve
 #' @return List with winner (1 or 2), score, and optionally points log
 simulate_tiebreak <- function(p1_stats, p2_stats, to_points = 7, log_points = FALSE,
-                              use_adjustment = NULL) {
+                              use_adjustment = NULL,
+                              tour_avg_return_vs_first = NULL,
+                              tour_avg_return_vs_second = NULL) {
   p1_points <- 0
   p2_points <- 0
   points_log <- list()
@@ -151,10 +175,12 @@ simulate_tiebreak <- function(p1_stats, p2_stats, to_points = 7, log_points = FA
     }
 
     if (server_is_p1) {
-      point_result <- simulate_point(p1_stats, p2_stats, use_adjustment)
+      point_result <- simulate_point(p1_stats, p2_stats, use_adjustment,
+                                     tour_avg_return_vs_first, tour_avg_return_vs_second)
       point_winner <- if(point_result$winner == 1) 1 else 2
     } else {
-      point_result <- simulate_point(p2_stats, p1_stats, use_adjustment)
+      point_result <- simulate_point(p2_stats, p1_stats, use_adjustment,
+                                     tour_avg_return_vs_first, tour_avg_return_vs_second)
       point_winner <- if(point_result$winner == 1) 2 else 1
     }
 
@@ -195,10 +221,14 @@ simulate_tiebreak <- function(p1_stats, p2_stats, to_points = 7, log_points = FA
 #'                     "super" (10-point at 6-6), or "none" (advantage set)
 #' @param log_games Whether to log individual games
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
+#' @param tour_avg_return_vs_first Tour average return % vs first serve
+#' @param tour_avg_return_vs_second Tour average return % vs second serve
 #' @return List with winner (1 or 2), score, and optionally games log
 simulate_set <- function(p1_stats, p2_stats, first_server = 1,
                          tiebreak_at = 6, final_set_tb = "normal",
-                         log_games = FALSE, use_adjustment = NULL) {
+                         log_games = FALSE, use_adjustment = NULL,
+                         tour_avg_return_vs_first = NULL,
+                         tour_avg_return_vs_second = NULL) {
   p1_games <- 0
   p2_games <- 0
   games_log <- list()
@@ -209,11 +239,15 @@ simulate_set <- function(p1_stats, p2_stats, first_server = 1,
     # Play a game
     if (current_server == 1) {
       game_result <- simulate_game(p1_stats, p2_stats, log_points = FALSE,
-                                   use_adjustment = use_adjustment)
+                                   use_adjustment = use_adjustment,
+                                   tour_avg_return_vs_first = tour_avg_return_vs_first,
+                                   tour_avg_return_vs_second = tour_avg_return_vs_second)
       game_winner <- if(game_result$winner == 1) 1 else 2
     } else {
       game_result <- simulate_game(p2_stats, p1_stats, log_points = FALSE,
-                                   use_adjustment = use_adjustment)
+                                   use_adjustment = use_adjustment,
+                                   tour_avg_return_vs_first = tour_avg_return_vs_first,
+                                   tour_avg_return_vs_second = tour_avg_return_vs_second)
       game_winner <- if(game_result$winner == 1) 2 else 1
     }
 
@@ -253,7 +287,9 @@ simulate_set <- function(p1_stats, p2_stats, first_server = 1,
 
       tb_points <- if(final_set_tb == "super") 10 else 7
       tb_result <- simulate_tiebreak(p1_stats, p2_stats, to_points = tb_points,
-                                     log_points = FALSE, use_adjustment = use_adjustment)
+                                     log_points = FALSE, use_adjustment = use_adjustment,
+                                     tour_avg_return_vs_first = tour_avg_return_vs_first,
+                                     tour_avg_return_vs_second = tour_avg_return_vs_second)
 
       if (tb_result$winner == 1) {
         p1_games <- p1_games + 1
@@ -284,10 +320,14 @@ simulate_set <- function(p1_stats, p2_stats, first_server = 1,
 #' @param final_set_tb Final set tiebreak rule: "normal", "super", or "none"
 #' @param log_sets Whether to log individual sets
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
+#' @param tour_avg_return_vs_first Tour average return % vs first serve
+#' @param tour_avg_return_vs_second Tour average return % vs second serve
 #' @return List with winner (1 or 2), score, set scores, and optionally sets log
 simulate_match <- function(p1_stats, p2_stats, best_of = 3,
                            final_set_tb = "normal", log_sets = FALSE,
-                           use_adjustment = NULL) {
+                           use_adjustment = NULL,
+                           tour_avg_return_vs_first = NULL,
+                           tour_avg_return_vs_second = NULL) {
   sets_to_win <- (best_of + 1) / 2  # 2 for best_of=3, 3 for best_of=5
 
   p1_sets <- 0
@@ -309,7 +349,9 @@ simulate_match <- function(p1_stats, p2_stats, best_of = 3,
       tiebreak_at = 6,
       final_set_tb = if(is_final_set) final_set_tb else "normal",
       log_games = FALSE,
-      use_adjustment = use_adjustment
+      use_adjustment = use_adjustment,
+      tour_avg_return_vs_first = tour_avg_return_vs_first,
+      tour_avg_return_vs_second = tour_avg_return_vs_second
     )
 
     if (log_sets) {

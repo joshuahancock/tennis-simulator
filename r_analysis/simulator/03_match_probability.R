@@ -29,6 +29,8 @@ source("r_analysis/simulator/02_player_stats.R")
 #' @param verbose Whether to print progress
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
 #' @param require_player_data If TRUE, return NULL when either player lacks real data (uses tour_average)
+#' @param tour_avg_return_vs_first Tour average return % vs first serve (if NULL, calculated from stats_db)
+#' @param tour_avg_return_vs_second Tour average return % vs second serve (if NULL, calculated from stats_db)
 #' @return List with win probabilities, confidence intervals, and score distribution. NULL if skipped.
 simulate_match_probability <- function(player1, player2,
                                         surface = "Hard",
@@ -40,12 +42,42 @@ simulate_match_probability <- function(player1, player2,
                                         final_set_tb = "normal",
                                         verbose = TRUE,
                                         use_adjustment = NULL,
-                                        require_player_data = FALSE) {
+                                        require_player_data = FALSE,
+                                        tour_avg_return_vs_first = NULL,
+                                        tour_avg_return_vs_second = NULL) {
 
   # Load stats database if not provided
   if (is.null(stats_db)) {
     if (verbose) cat("Loading player statistics...\n")
     stats_db <- load_player_stats(tour = tour)
+  }
+
+  # Calculate tour averages from stats_db if not provided
+  if (is.null(tour_avg_return_vs_first) || is.null(tour_avg_return_vs_second)) {
+    # Try surface-specific first, fall back to overall
+    if (!is.null(surface) && !is.null(stats_db$tour_avg_surface) &&
+        surface %in% stats_db$tour_avg_surface$surface) {
+      tour_avg <- stats_db$tour_avg_surface %>% filter(surface == !!surface)
+    } else if (!is.null(stats_db$tour_avg_overall)) {
+      tour_avg <- stats_db$tour_avg_overall
+    } else {
+      # Use defaults if stats_db doesn't have tour averages
+      tour_avg <- NULL
+    }
+
+    if (!is.null(tour_avg)) {
+      if (is.null(tour_avg_return_vs_first)) {
+        tour_avg_return_vs_first <- tour_avg$return_vs_first_pct[1]
+      }
+      if (is.null(tour_avg_return_vs_second)) {
+        tour_avg_return_vs_second <- tour_avg$return_vs_second_pct[1]
+      }
+    }
+
+    if (verbose && !is.null(tour_avg_return_vs_first)) {
+      cat(sprintf("Tour averages: return vs 1st=%.1f%%, return vs 2nd=%.1f%%\n",
+                  tour_avg_return_vs_first * 100, tour_avg_return_vs_second * 100))
+    }
   }
 
   # Get player stats
@@ -98,7 +130,9 @@ simulate_match_probability <- function(player1, player2,
   for (i in 1:n_sims) {
     results[[i]] <- simulate_match(p1_stats, p2_stats, best_of = best_of,
                                    final_set_tb = final_set_tb,
-                                   use_adjustment = use_adjustment)
+                                   use_adjustment = use_adjustment,
+                                   tour_avg_return_vs_first = tour_avg_return_vs_first,
+                                   tour_avg_return_vs_second = tour_avg_return_vs_second)
   }
 
   # Analyze results
@@ -146,6 +180,8 @@ simulate_match_probability <- function(player1, player2,
     ci_upper = ci$upper,
     p1_stats = p1_stats,
     p2_stats = p2_stats,
+    tour_avg_return_vs_first = tour_avg_return_vs_first,
+    tour_avg_return_vs_second = tour_avg_return_vs_second,
     score_distribution = score_df,
     set_distribution = set_dist,
     raw_results = results

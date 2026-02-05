@@ -1,0 +1,308 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{default}
+\usecolortheme{dove}
+
+% Packages
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{listings}
+
+% Colors
+\definecolor{passgreen}{RGB}{76,175,80}
+\definecolor{failred}{RGB}{244,67,54}
+\definecolor{warnambr}{RGB}{255,152,0}
+
+% Custom commands
+\newcommand{\cmark}{\textcolor{passgreen}{\checkmark}}
+\newcommand{\xmark}{\textcolor{failred}{$\times$}}
+
+\title{Referee Report: Tennis Match Simulator}
+\subtitle{Round 1 Audit --- Cross-Language Replication \& Code Review}
+\author{Referee 2}
+\date{2026-02-04}
+
+\begin{document}
+
+% ===========================================================================
+% SLIDE 1: Title
+% ===========================================================================
+\begin{frame}
+\titlepage
+\end{frame}
+
+% ===========================================================================
+% SLIDE 2: Executive Summary
+% ===========================================================================
+\begin{frame}{Verdict: Major Revisions Required}
+
+\textbf{Overall Assessment:} Sound core logic, but critical infrastructure gaps.
+
+\vspace{1em}
+
+\textbf{Key Findings:}
+\begin{itemize}
+    \item[\xmark] \textbf{No random seeds} --- Results not reproducible
+    \item[\xmark] \textbf{Hardcoded tour averages} --- Should be computed from data
+    \item[\xmark] \textbf{No master script} --- Cannot replicate with single command
+    \item[\xmark] \textbf{No uncertainty on ROI} --- Point estimates only
+    \item[\cmark] \textbf{Python replication confirms logic is correct}
+    \item[\cmark] \textbf{Missing value handling is reasonable}
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{Replication Readiness Score:} 4/10
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 3: Cross-Language Replication Results
+% ===========================================================================
+\begin{frame}{Python Replication: Monte Carlo Engine Verified}
+
+Created: \texttt{code/replication/referee2\_replicate\_mc\_engine.py}
+
+\vspace{0.5em}
+
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Test Case} & \textbf{Python Result} & \textbf{Status} \\
+\midrule
+Typical ATP matchup (P1 win prob) & 0.5815 & \cmark \\
+Same matchup, no adjustment & 0.6737 & \cmark \\
+Opponent adjustment effect & +9.2pp & \cmark \\
+Big server vs elite returner & 0.4155 & \cmark \\
+\midrule
+Point-level: Aces & 8.17\% (exp: 8.00\%) & \cmark \\
+Point-level: Double faults & 2.99\% (exp: 3.00\%) & \cmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.5em}
+
+\textbf{Note:} Exact numerical comparison impossible --- R code has no \texttt{set.seed()}.
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 4: Direct Comparison Not Possible
+% ===========================================================================
+\begin{frame}{Replication Limitation: No Random Seeds in R Code}
+
+\textbf{Problem:} Cannot verify Python-R equivalence to 6 decimal places.
+
+\vspace{1em}
+
+\begin{columns}
+\column{0.5\textwidth}
+\textbf{What I Did:}
+\begin{itemize}
+    \item Line-by-line translation of R $\rightarrow$ Python
+    \item Verified all formulas match
+    \item Point-level statistics correct
+    \item Confidence intervals match Wilson formula
+\end{itemize}
+
+\column{0.5\textwidth}
+\textbf{What's Missing:}
+\begin{itemize}
+    \item R output with fixed seed
+    \item Direct comparison table
+    \item Guarantee of identical RNG sequences
+\end{itemize}
+\end{columns}
+
+\vspace{1em}
+
+\textbf{Resolution Required:} Author must add \texttt{set.seed()} and re-run.
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 5: Code Audit - Major Issues
+% ===========================================================================
+\begin{frame}[fragile]{Code Audit: Hardcoded Tour Averages}
+
+\textbf{File:} \texttt{01\_mc\_engine.R}, lines 45 and 68
+
+\vspace{0.5em}
+
+\begin{lstlisting}[language=R, basicstyle=\ttfamily\small]
+# Line 45:
+avg_return_vs_first <- 0.35
+
+# Line 68:
+avg_return_vs_second <- 0.50
+\end{lstlisting}
+
+\vspace{0.5em}
+
+\textbf{Issue:} These values should be computed from data, not hardcoded.
+
+\vspace{0.5em}
+
+\textbf{Impact:}
+\begin{itemize}
+    \item If data period changes, values become incorrect
+    \item Cannot verify these match actual tour averages
+    \item Acknowledged in CLAUDE.md as ``Technical Debt \#1''
+\end{itemize}
+
+\vspace{0.5em}
+
+\textbf{Fix:} Use \texttt{stats\_db\$tour\_avg\_surface\$return\_vs\_first\_pct}
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 6: Replication Readiness Scorecard
+% ===========================================================================
+\begin{frame}{Replication Readiness: 4/10}
+
+\begin{tikzpicture}
+  % Progress bar
+  \fill[passgreen!60] (0,0) rectangle (4,0.5);
+  \fill[gray!30] (4,0) rectangle (10,0.5);
+  \node[white, font=\bfseries] at (2,0.25) {4/10};
+\end{tikzpicture}
+
+\vspace{1em}
+
+\begin{columns}
+\column{0.5\textwidth}
+\textcolor{passgreen}{\cmark} Folder structure (data/raw, data/processed)\\
+\textcolor{passgreen}{\cmark} Relative paths used\\
+\textcolor{passgreen}{\cmark} Informative variable names\\
+\textcolor{passgreen}{\cmark} Numbered script execution order\\
+
+\column{0.5\textwidth}
+\textcolor{failred}{\xmark} \textbf{No master script}\\
+\textcolor{failred}{\xmark} \textbf{No renv.lock}\\
+\textcolor{failred}{\xmark} \textbf{No README in /code}\\
+\textcolor{failred}{\xmark} \textbf{Random seeds not set}\\
+\end{columns}
+
+\vspace{1em}
+
+\textbf{Bottom line:} A replicator cannot run the analysis without reading all code.
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 7: Econometrics Assessment
+% ===========================================================================
+\begin{frame}{Econometrics: ROI Estimates Lack Uncertainty}
+
+\textbf{Reported Result (from CLAUDE.md):}
+\begin{quote}
+ROI at 5\% edge: -5.1\%
+\end{quote}
+
+\vspace{0.5em}
+
+\textbf{Problem:} No confidence interval or standard error provided.
+
+\vspace{0.5em}
+
+\textbf{Why This Matters:}
+\begin{itemize}
+    \item Betting returns have high variance
+    \item -5.1\% could be consistent with true ROI of +10\% or -20\%
+    \item Cannot determine if result is statistically distinguishable from zero
+    \item Cannot assess whether model has genuine edge
+\end{itemize}
+
+\vspace{0.5em}
+
+\textbf{Fix:} Add bootstrap CIs by resampling the betting outcomes.
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 8: Output Automation
+% ===========================================================================
+\begin{frame}{Output Automation: Mostly Manual}
+
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Output Type} & \textbf{Status} & \textbf{Concern Level} \\
+\midrule
+Backtest results to RDS & \cmark Automated & --- \\
+Tables for publication & \xmark Manual & Minor \\
+Figures (calibration, ROI) & \xmark Not saved & Minor \\
+In-text statistics in CLAUDE.md & \xmark Manual & \textbf{Major} \\
+Reproducible outputs & \xmark No seeds & \textbf{Major} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{1em}
+
+\textbf{Key Issue:} Statistics in CLAUDE.md (58.9\% accuracy, 0.2336 Brier, -5.1\% ROI) appear manually entered. These should be pulled programmatically.
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 9: Recommendations
+% ===========================================================================
+\begin{frame}{Priority Recommendations for Resubmission}
+
+\begin{enumerate}
+    \item \textbf{Add \texttt{set.seed()} to all scripts}\\
+          Use documented seed, re-run backtests
+
+    \item \textbf{Create master script}\\
+          \texttt{code/run\_analysis.R} that runs full pipeline
+
+    \item \textbf{Calculate tour averages dynamically}\\
+          Replace hardcoded 0.35/0.50 with computed values
+
+    \item \textbf{Add bootstrap CIs to ROI}\\
+          Quantify uncertainty on betting performance
+
+    \item \textbf{Set up renv}\\
+          Document package versions for reproducibility
+
+    \item \textbf{Verify Python-R equivalence}\\
+          With fixed seed, confirm 6-decimal match
+\end{enumerate}
+
+\end{frame}
+
+% ===========================================================================
+% SLIDE 10: Files Produced
+% ===========================================================================
+\begin{frame}{Referee 2 Deliverables}
+
+\textbf{Replication Scripts:}
+\begin{itemize}
+    \item \texttt{code/replication/referee2\_replicate\_mc\_engine.py}
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{Report Files:}
+\begin{itemize}
+    \item \texttt{correspondence/referee2/2026-02-04\_round1\_report.md}
+    \item \texttt{correspondence/referee2/2026-02-04\_round1\_deck.tex}
+    \item \texttt{correspondence/referee2/2026-02-04\_round1\_deck.pdf}
+\end{itemize}
+
+\vspace{1em}
+
+\textbf{Next Steps:}
+\begin{enumerate}
+    \item Author addresses Major Concerns
+    \item Author files response at \texttt{2026-02-XX\_round1\_response.md}
+    \item Round 2 audit verifies fixes
+\end{enumerate}
+
+\end{frame}
+
+\end{document}

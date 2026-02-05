@@ -19,6 +19,10 @@ source("r_analysis/simulator/05_betting_data.R")
 # CONFIGURATION
 # ============================================================================
 
+# Random seed for reproducibility
+# Using date format YYYYMMDD for the seed
+RANDOM_SEED <- 20260204
+
 # Default edge thresholds for betting
 EDGE_THRESHOLDS <- c(0.01, 0.03, 0.05, 0.10)
 
@@ -160,7 +164,12 @@ backtest_period <- function(start_date, end_date, model = "base",
                             progress_interval = 50,
                             stats_lookback_years = NULL,
                             use_adjustment = NULL,
-                            require_player_data = FALSE) {
+                            require_player_data = FALSE,
+                            seed = RANDOM_SEED) {
+
+  # Set random seed for reproducibility
+  set.seed(seed)
+  cat(sprintf("Random seed set to: %d\n", seed))
 
   start_date <- as_date(start_date)
   end_date <- as_date(end_date)
@@ -350,6 +359,7 @@ backtest_period <- function(start_date, end_date, model = "base",
     n_skipped = skipped,
     n_errors = errors,
     require_player_data = require_player_data,
+    seed = seed,
     predictions = results_df,
     analysis = analysis
   ))
@@ -400,7 +410,8 @@ analyze_backtest <- function(predictions) {
     cat(sprintf("  Bets: %d (%.1f%% of matches)\n",
                 result$n_bets, result$n_bets / nrow(predictions) * 100))
     cat(sprintf("  Win Rate: %.1f%%\n", result$win_rate * 100))
-    cat(sprintf("  ROI: %+.1f%%\n", result$roi * 100))
+    cat(sprintf("  ROI: %+.1f%% (95%% CI: %+.1f%% to %+.1f%%)\n",
+                result$roi * 100, result$roi_ci_lower * 100, result$roi_ci_upper * 100))
     cat(sprintf("  Profit (flat stake): $%.2f\n", result$profit_flat))
     cat(sprintf("  Final Bankroll (Kelly): $%.2f\n", result$final_bankroll_kelly))
   }
@@ -559,18 +570,66 @@ simulate_betting <- function(predictions, edge_threshold = 0.03,
     max_drawdown <- max(max_drawdown, drawdown)
   }
 
+  # Calculate bootstrap CI for ROI
+  roi_ci <- bootstrap_roi_ci(bets, n_bootstrap = 1000)
+
   return(list(
     n_bets = nrow(bets),
     win_rate = mean(bets$bet_won),
     avg_edge = mean(bets$bet_edge),
     avg_odds = mean(bets$bet_odds),
     roi = roi_flat,
+    roi_ci_lower = roi_ci$lower,
+    roi_ci_upper = roi_ci$upper,
     profit_flat = total_flat_profit,
     final_bankroll_kelly = bankroll,
     kelly_roi = (bankroll - starting_bankroll) / starting_bankroll,
     max_drawdown = max_drawdown,
     bankroll_history = bankroll_history,
     bets = bets
+  ))
+}
+
+#' Bootstrap confidence interval for ROI
+#' @param bets Dataframe with bet outcomes (must have bet_won, bet_odds columns)
+#' @param n_bootstrap Number of bootstrap samples
+#' @param conf_level Confidence level (default 0.95)
+#' @param flat_stake Stake per bet for ROI calculation
+#' @return List with lower and upper CI bounds
+bootstrap_roi_ci <- function(bets, n_bootstrap = 1000, conf_level = 0.95,
+                              flat_stake = 100) {
+  if (nrow(bets) == 0) {
+    return(list(lower = NA, upper = NA))
+  }
+
+  # Function to calculate ROI from a sample
+  calc_roi <- function(sample_bets) {
+    profits <- ifelse(sample_bets$bet_won,
+                      (sample_bets$bet_odds - 1) * flat_stake,
+                      -flat_stake)
+    sum(profits) / (nrow(sample_bets) * flat_stake)
+  }
+
+  # Bootstrap resampling
+  n <- nrow(bets)
+  roi_samples <- numeric(n_bootstrap)
+
+  for (i in 1:n_bootstrap) {
+    # Sample with replacement
+    sample_indices <- sample(1:n, n, replace = TRUE)
+    sample_bets <- bets[sample_indices, ]
+    roi_samples[i] <- calc_roi(sample_bets)
+  }
+
+  # Calculate percentile CI
+  alpha <- 1 - conf_level
+  lower <- quantile(roi_samples, alpha / 2)
+  upper <- quantile(roi_samples, 1 - alpha / 2)
+
+  return(list(
+    lower = as.numeric(lower),
+    upper = as.numeric(upper),
+    se = sd(roi_samples)
   ))
 }
 
@@ -615,9 +674,11 @@ calculate_clv <- function(predictions) {
 #' @return Comparison summary
 compare_models_backtest <- function(start_date, end_date,
                                      models = c("base", "historical", "style", "combined"),
-                                     tour = "ATP", n_sims = BACKTEST_N_SIMS) {
+                                     tour = "ATP", n_sims = BACKTEST_N_SIMS,
+                                     seed = RANDOM_SEED) {
 
   cat("\n=== MODEL COMPARISON BACKTEST ===\n\n")
+  cat(sprintf("Random seed: %d\n\n", seed))
 
   # Load data once
   betting_data <- load_betting_data(tour = tour)
@@ -641,7 +702,8 @@ compare_models_backtest <- function(start_date, end_date,
       betting_data = betting_data,
       stats_db = stats_db,
       feature_db = feature_db,
-      n_sims = n_sims
+      n_sims = n_sims,
+      seed = seed
     )
 
     results[[model]] <- bt
