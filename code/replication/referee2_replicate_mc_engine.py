@@ -24,10 +24,12 @@ import numpy as np
 # Global toggle for opponent adjustment (matches R's USE_OPPONENT_ADJUSTMENT)
 USE_OPPONENT_ADJUSTMENT = True
 
-# Hardcoded tour averages from R code (01_mc_engine.R lines 45, 68)
-# NOTE: These are hardcoded in R - potential issue flagged in audit
-AVG_RETURN_VS_FIRST = 0.35
-AVG_RETURN_VS_SECOND = 0.50
+# Default tour averages (matches R's DEFAULT_TOUR_AVG_* constants)
+# These are fallbacks when tour averages are not passed explicitly.
+# In production, tour averages should be calculated from data.
+# Actual ATP Hard court averages (2015-2024): return_vs_first=0.275, return_vs_second=0.493
+DEFAULT_TOUR_AVG_RETURN_VS_FIRST = 0.35
+DEFAULT_TOUR_AVG_RETURN_VS_SECOND = 0.50
 
 
 # ============================================================================
@@ -93,12 +95,14 @@ class MatchResult:
 def simulate_point(
     server_stats: PlayerStats,
     returner_stats: Optional[PlayerStats] = None,
-    use_adjustment: Optional[bool] = None
+    use_adjustment: Optional[bool] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> PointResult:
     """
     Simulate a single point.
 
-    Replicates R function: simulate_point() in 01_mc_engine.R lines 24-79
+    Replicates R function: simulate_point() in 01_mc_engine.R lines 31-94
 
     Parameters
     ----------
@@ -109,6 +113,10 @@ def simulate_point(
     use_adjustment : bool, optional
         Whether to adjust serve win probability based on returner stats.
         If None, uses global USE_OPPONENT_ADJUSTMENT setting.
+    tour_avg_return_vs_first : float, optional
+        Tour average return % vs first serve. If None, uses default.
+    tour_avg_return_vs_second : float, optional
+        Tour average return % vs second serve. If None, uses default.
 
     Returns
     -------
@@ -118,13 +126,19 @@ def simulate_point(
     if use_adjustment is None:
         use_adjustment = USE_OPPONENT_ADJUSTMENT
 
+    # Use defaults if tour averages not provided (matches R lines 40-45)
+    if tour_avg_return_vs_first is None:
+        tour_avg_return_vs_first = DEFAULT_TOUR_AVG_RETURN_VS_FIRST
+    if tour_avg_return_vs_second is None:
+        tour_avg_return_vs_second = DEFAULT_TOUR_AVG_RETURN_VS_SECOND
+
     # First serve in?
     first_in = random.random() < server_stats.first_in_pct
 
     if first_in:
         # Check for ace on first serve
         # Ace rate is conditional on first serve being in
-        # R code line 36: ace_rate_on_first <- server_stats$ace_pct / server_stats$first_in_pct
+        # R code line 53: ace_rate_on_first <- server_stats$ace_pct / server_stats$first_in_pct
         ace_rate_on_first = server_stats.ace_pct / server_stats.first_in_pct
         if random.random() < ace_rate_on_first:
             return PointResult(winner=1, point_type="ace", serve="first")
@@ -133,11 +147,11 @@ def simulate_point(
         if (use_adjustment and
             returner_stats is not None and
             returner_stats.return_vs_first is not None):
-            # R code lines 44-48:
-            # adjustment <- avg_return_vs_first - returner_stats$return_vs_first
+            # R code lines 59-64:
+            # adjustment <- tour_avg_return_vs_first - returner_stats$return_vs_first
             # win_prob <- server_stats$first_won_pct + adjustment
             # win_prob <- pmax(0.3, pmin(0.95, win_prob))
-            adjustment = AVG_RETURN_VS_FIRST - returner_stats.return_vs_first
+            adjustment = tour_avg_return_vs_first - returner_stats.return_vs_first
             win_prob = server_stats.first_won_pct + adjustment
             win_prob = max(0.3, min(0.95, win_prob))  # Clamp to reasonable range
         else:
@@ -153,7 +167,7 @@ def simulate_point(
     else:
         # Second serve
         # Check for double fault
-        # R code line 60: df_rate_on_second <- server_stats$df_pct / (1 - server_stats$first_in_pct)
+        # R code line 76: df_rate_on_second <- server_stats$df_pct / (1 - server_stats$first_in_pct)
         df_rate_on_second = server_stats.df_pct / (1 - server_stats.first_in_pct)
         if random.random() < df_rate_on_second:
             return PointResult(winner=0, point_type="double_fault", serve="second")
@@ -162,8 +176,8 @@ def simulate_point(
         if (use_adjustment and
             returner_stats is not None and
             returner_stats.return_vs_second is not None):
-            # R code lines 68-71
-            adjustment = AVG_RETURN_VS_SECOND - returner_stats.return_vs_second
+            # R code lines 82-86
+            adjustment = tour_avg_return_vs_second - returner_stats.return_vs_second
             win_prob = server_stats.second_won_pct + adjustment
             win_prob = max(0.2, min(0.85, win_prob))
         else:
@@ -184,12 +198,14 @@ def simulate_point(
 def simulate_game(
     server_stats: PlayerStats,
     returner_stats: Optional[PlayerStats] = None,
-    use_adjustment: Optional[bool] = None
+    use_adjustment: Optional[bool] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> GameResult:
     """
     Simulate a single game.
 
-    Replicates R function: simulate_game() in 01_mc_engine.R lines 86-122
+    Replicates R function: simulate_game() in 01_mc_engine.R lines 109-142
 
     Tennis scoring: first to 4 points, win by 2 (deuce/advantage rules).
     """
@@ -197,14 +213,17 @@ def simulate_game(
     returner_points = 0
 
     while True:
-        point_result = simulate_point(server_stats, returner_stats, use_adjustment)
+        point_result = simulate_point(
+            server_stats, returner_stats, use_adjustment,
+            tour_avg_return_vs_first, tour_avg_return_vs_second
+        )
 
         if point_result.winner == 1:
             server_points += 1
         else:
             returner_points += 1
 
-        # Check for game won (R code lines 113-120)
+        # Check for game won (R code lines 133-140)
         if server_points >= 4 and server_points - returner_points >= 2:
             return GameResult(winner=1, score=(server_points, returner_points))
         if returner_points >= 4 and returner_points - server_points >= 2:
@@ -219,12 +238,14 @@ def simulate_tiebreak(
     p1_stats: PlayerStats,
     p2_stats: PlayerStats,
     to_points: int = 7,
-    use_adjustment: Optional[bool] = None
+    use_adjustment: Optional[bool] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> TiebreakResult:
     """
     Simulate a tiebreak.
 
-    Replicates R function: simulate_tiebreak() in 01_mc_engine.R lines 124-183
+    Replicates R function: simulate_tiebreak() in 01_mc_engine.R lines 153-209
 
     Serve rotation: P1 serves first point, then alternate every 2 points.
     """
@@ -234,7 +255,7 @@ def simulate_tiebreak(
 
     while True:
         # Determine server based on point number
-        # R code lines 147-151:
+        # R code lines 171-175:
         # if (point_num == 0) server_is_p1 <- TRUE
         # else server_is_p1 <- ((point_num - 1) %/% 2) %% 2 == 0
         if point_num == 0:
@@ -243,10 +264,16 @@ def simulate_tiebreak(
             server_is_p1 = ((point_num - 1) // 2) % 2 == 0
 
         if server_is_p1:
-            point_result = simulate_point(p1_stats, p2_stats, use_adjustment)
+            point_result = simulate_point(
+                p1_stats, p2_stats, use_adjustment,
+                tour_avg_return_vs_first, tour_avg_return_vs_second
+            )
             point_winner = 1 if point_result.winner == 1 else 2
         else:
-            point_result = simulate_point(p2_stats, p1_stats, use_adjustment)
+            point_result = simulate_point(
+                p2_stats, p1_stats, use_adjustment,
+                tour_avg_return_vs_first, tour_avg_return_vs_second
+            )
             point_winner = 2 if point_result.winner == 1 else 1
 
         if point_winner == 1:
@@ -257,7 +284,7 @@ def simulate_tiebreak(
         point_num += 1
 
         # Check for tiebreak won (must win by 2)
-        # R code lines 174-181
+        # R code lines 199-206
         if p1_points >= to_points and p1_points - p2_points >= 2:
             return TiebreakResult(winner=1, score=(p1_points, p2_points))
         if p2_points >= to_points and p2_points - p1_points >= 2:
@@ -274,17 +301,23 @@ def simulate_set(
     first_server: int = 1,
     tiebreak_at: int = 6,
     final_set_tb: str = "normal",
-    use_adjustment: Optional[bool] = None
+    use_adjustment: Optional[bool] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> SetResult:
     """
     Simulate a set.
 
-    Replicates R function: simulate_set() in 01_mc_engine.R lines 199-274
+    Replicates R function: simulate_set() in 01_mc_engine.R lines 227-310
 
     Parameters
     ----------
     final_set_tb : str
         "normal" (7-point at 6-6), "super" (10-point at 6-6), or "none" (advantage set)
+    tour_avg_return_vs_first : float, optional
+        Tour average return % vs first serve. If None, uses default.
+    tour_avg_return_vs_second : float, optional
+        Tour average return % vs second serve. If None, uses default.
     """
     p1_games = 0
     p2_games = 0
@@ -293,10 +326,16 @@ def simulate_set(
     while True:
         # Play a game
         if current_server == 1:
-            game_result = simulate_game(p1_stats, p2_stats, use_adjustment)
+            game_result = simulate_game(
+                p1_stats, p2_stats, use_adjustment,
+                tour_avg_return_vs_first, tour_avg_return_vs_second
+            )
             game_winner = 1 if game_result.winner == 1 else 2
         else:
-            game_result = simulate_game(p2_stats, p1_stats, use_adjustment)
+            game_result = simulate_game(
+                p2_stats, p1_stats, use_adjustment,
+                tour_avg_return_vs_first, tour_avg_return_vs_second
+            )
             game_winner = 2 if game_result.winner == 1 else 1
 
         if game_winner == 1:
@@ -305,7 +344,7 @@ def simulate_set(
             p2_games += 1
 
         # Check for set won (6+ games, lead of 2)
-        # R code lines 235-244
+        # R code lines 269-278
         if p1_games >= 6 and p1_games - p2_games >= 2:
             return SetResult(
                 winner=1,
@@ -320,7 +359,7 @@ def simulate_set(
             )
 
         # Check for tiebreak
-        # R code lines 247-269
+        # R code lines 281-304
         if p1_games == tiebreak_at and p2_games == tiebreak_at:
             if final_set_tb == "none":
                 # No tiebreak - continue playing (advantage set)
@@ -328,7 +367,10 @@ def simulate_set(
                 continue
 
             tb_points = 10 if final_set_tb == "super" else 7
-            tb_result = simulate_tiebreak(p1_stats, p2_stats, tb_points, use_adjustment)
+            tb_result = simulate_tiebreak(
+                p1_stats, p2_stats, tb_points, use_adjustment,
+                tour_avg_return_vs_first, tour_avg_return_vs_second
+            )
 
             if tb_result.winner == 1:
                 p1_games += 1
@@ -355,12 +397,14 @@ def simulate_match(
     p2_stats: PlayerStats,
     best_of: int = 3,
     final_set_tb: str = "normal",
-    use_adjustment: Optional[bool] = None
+    use_adjustment: Optional[bool] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> MatchResult:
     """
     Simulate a complete match.
 
-    Replicates R function: simulate_match() in 01_mc_engine.R lines 288-349
+    Replicates R function: simulate_match() in 01_mc_engine.R lines 326-391
     """
     sets_to_win = (best_of + 1) // 2  # 2 for best_of=3, 3 for best_of=5
 
@@ -368,7 +412,7 @@ def simulate_match(
     p2_sets = 0
     set_scores = []
 
-    # Randomly determine first server (R code line 299)
+    # Randomly determine first server (R code line 339)
     first_server = random.choice([1, 2])
     current_server = first_server
 
@@ -380,7 +424,9 @@ def simulate_match(
             first_server=current_server,
             tiebreak_at=6,
             final_set_tb=final_set_tb if is_final_set else "normal",
-            use_adjustment=use_adjustment
+            use_adjustment=use_adjustment,
+            tour_avg_return_vs_first=tour_avg_return_vs_first,
+            tour_avg_return_vs_second=tour_avg_return_vs_second
         )
 
         set_scores.append(set_result.score)
@@ -419,13 +465,24 @@ def estimate_win_probability(
     best_of: int = 3,
     final_set_tb: str = "normal",
     use_adjustment: Optional[bool] = None,
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
+    tour_avg_return_vs_first: Optional[float] = None,
+    tour_avg_return_vs_second: Optional[float] = None
 ) -> Dict:
     """
     Estimate match win probability via Monte Carlo simulation.
 
     Replicates the core loop in R's simulate_match_probability()
-    from 03_match_probability.R lines 98-102
+    from 03_match_probability.R lines 130-136
+
+    Parameters
+    ----------
+    tour_avg_return_vs_first : float, optional
+        Tour average return % vs first serve. If None, uses default (0.35).
+        Actual ATP Hard court average (2015-2024): 0.275
+    tour_avg_return_vs_second : float, optional
+        Tour average return % vs second serve. If None, uses default (0.50).
+        Actual ATP Hard court average (2015-2024): 0.493
     """
     if seed is not None:
         random.seed(seed)
@@ -433,14 +490,17 @@ def estimate_win_probability(
 
     p1_wins = 0
     for _ in range(n_sims):
-        result = simulate_match(p1_stats, p2_stats, best_of, final_set_tb, use_adjustment)
+        result = simulate_match(
+            p1_stats, p2_stats, best_of, final_set_tb, use_adjustment,
+            tour_avg_return_vs_first, tour_avg_return_vs_second
+        )
         if result.winner == 1:
             p1_wins += 1
 
     p1_win_prob = p1_wins / n_sims
 
     # Wilson score confidence interval (replicates prop_ci in R)
-    # R code from 03_match_probability.R lines 160-172
+    # R code from 03_match_probability.R lines 196-208
     from scipy import stats
     z = stats.norm.ppf(0.975)  # 95% CI
     n = n_sims
@@ -458,7 +518,9 @@ def estimate_win_probability(
         "p2_win_prob": 1 - p1_win_prob,
         "ci_lower": ci_lower,
         "ci_upper": ci_upper,
-        "n_sims": n_sims
+        "n_sims": n_sims,
+        "tour_avg_return_vs_first": tour_avg_return_vs_first or DEFAULT_TOUR_AVG_RETURN_VS_FIRST,
+        "tour_avg_return_vs_second": tour_avg_return_vs_second or DEFAULT_TOUR_AVG_RETURN_VS_SECOND
     }
 
 
@@ -566,6 +628,33 @@ def run_verification_tests():
 
     print(f"Player 1 win probability (no adj): {result3['p1_win_prob']:.4f}")
     print(f"Difference from adjusted: {result3['p1_win_prob'] - result['p1_win_prob']:.4f}")
+
+    # Test Case 4: Using actual ATP Hard court tour averages
+    print("\n--- Test Case 4: With actual ATP Hard court tour averages ---")
+    print("(Calculated from 26,587 ATP matches 2015-2024)")
+
+    # Actual ATP Hard court averages from stats_db
+    ATP_HARD_RETURN_VS_FIRST = 0.275
+    ATP_HARD_RETURN_VS_SECOND = 0.493
+
+    result4 = estimate_win_probability(
+        player1, player2,
+        n_sims=10000,
+        best_of=3,
+        use_adjustment=True,
+        seed=42,
+        tour_avg_return_vs_first=ATP_HARD_RETURN_VS_FIRST,
+        tour_avg_return_vs_second=ATP_HARD_RETURN_VS_SECOND
+    )
+
+    print(f"Tour averages: return_vs_first={ATP_HARD_RETURN_VS_FIRST:.1%}, "
+          f"return_vs_second={ATP_HARD_RETURN_VS_SECOND:.1%}")
+    print(f"Player 1 win probability: {result4['p1_win_prob']:.4f}")
+    print(f"95% CI: [{result4['ci_lower']:.4f}, {result4['ci_upper']:.4f}]")
+    print(f"\nComparison:")
+    print(f"  With default averages (35%/50%): {result['p1_win_prob']:.4f}")
+    print(f"  With actual averages (27.5%/49.3%): {result4['p1_win_prob']:.4f}")
+    print(f"  Difference: {result4['p1_win_prob'] - result['p1_win_prob']:.4f}")
 
     # Test single point simulation for debugging
     print("\n--- Point-level verification ---")

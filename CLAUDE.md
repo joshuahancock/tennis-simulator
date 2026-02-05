@@ -165,7 +165,7 @@ code/replication/
 └── ...
 ```
 
-**Current Status:** Round 1 complete - Major Revisions required (addressing in progress)
+**Current Status:** Accepted with Minor Revisions (Round 2 complete)
 
 **Critical Rule:** Referee 2 NEVER modifies author code. It only reads, runs, and creates its own replication scripts in `code/replication/`. Only the author (you) modifies your own code in response to referee concerns.
 
