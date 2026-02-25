@@ -218,6 +218,89 @@ Tested different MIN_TOTAL_MATCHES values on H1 2024 data:
 
 ---
 
+## 2026-02-24 — Directory Restructure + Paper Data Alignment
+
+### Directory Restructure
+
+Reorganized codebase from language-based layout (`r_analysis/simulator/`, `code/`) to stage-based layout to support multiple models and future language additions. New structure:
+
+```
+src/data/           — shared data loading (player_stats, betting_data, date_alignment)
+src/models/         — one subdir per model (monte_carlo/, elo/, future paper_model/)
+src/backtesting/    — shared backtesting framework
+src/utils/          — shared utilities
+analysis/           — research scripts organized by theme
+  calibration/  edge/  model_variants/  validation/  trajectory/  features/
+scripts/            — top-level runners (run_analysis.R, compare_models.R, etc.)
+tests/              — unit tests
+correspondence/referee2/replication/  — Referee 2 scripts (was code/replication/)
+```
+
+All `source()` paths updated. Smoke test: `source("src/backtesting/backtest.R")` loads clean; all 14 Elo unit tests pass.
+
+---
+
+### Paper Data Alignment (arxiv.org/html/2510.20454v1)
+
+Paper filters: Grand Slams + Tour Finals + Masters 1000 + ATP 500-series. Date range 2014–Jun 2025.
+
+**Key lesson: `draw_size` is not a proxy for tour tier.**
+
+Initial attempt used `draw_size >= 48` to identify 500-series within Sackmann's `tourney_level == "A"` bucket. This was wrong for two reasons:
+1. Nearly all ATP 500 tournaments have `draw_size = 32` in Sackmann (main draw only)
+2. Some 250s (Winston-Salem) and non-tour events (Olympics, COVID alternates) had large draw sizes for unrelated reasons
+
+**Fix:** explicit named list of the 13 ATP 500-series events:
+```r
+ATP_500_NAMES <- c("Dubai", "Rotterdam", "Acapulco", "Rio de Janeiro",
+                   "Barcelona", "Hamburg", "Queen's Club", "Halle",
+                   "Washington", "Tokyo", "Beijing", "Vienna", "Basel")
+```
+Script: `analysis/features/paper_data_comparison.R`
+
+**Resulting counts vs paper targets:**
+
+| | Paper | Ours (2014–2024) | Gap |
+|---|---|---|---|
+| ATP | 16,663 | 15,441 | -1,222 |
+| WTA | 16,447 | 15,234 | -1,213 |
+
+Both gaps are ~1,200 and nearly identical — consistent with a single cause: Sackmann data ends at 2024 and the paper runs through June 2025. At ~1,570 matches/year, half of 2025 ≈ 785 matches. Residual ~400-match gap per tour is likely source-level differences between Sackmann and tennis-data.co.uk.
+
+WTA filter `tourney_level %in% c("G", "F", "PM", "P")` appears correct. "O" in WTA data = Olympics (not WTA 1000).
+
+---
+
+### Future Direction: 250-Series Market Efficiency
+
+**Hypothesis (Josh):** ATP/WTA 250-series events may have less efficient betting markets than 500/1000/Slam events, making edges easier to find there. Rationale: lower public attention, less betting volume, fewer analysts building models for these matches.
+
+**Assessment:** The direction is plausible but execution is harder than it looks.
+
+Arguments in favor:
+- **Lower bookmaker investment**: Pinnacle's vig may be slightly higher at 250 level due to lower volume — higher vig = less pressure to price precisely
+- **Less analyst competition**: Nearly all published tennis models (including the paper we're replicating) focus exclusively on 500/1000/Slams, leaving 250s undermodeled
+- **Player familiarity gap**: Rankings 50–200 are less studied; bookmakers and public have less information on these players
+
+Arguments against:
+- **Our model suffers more here too**: Our serve/return stats model requires match history. 250s are where players have the thinnest data — we already saw from the `MIN_TOTAL_MATCHES` analysis that data scarcity hurts us. We'd be competing with less-efficient markets using a less-reliable model
+- **Higher volatility**: More unknown players, more injuries/withdrawals, more scheduling noise — variance goes up without necessarily improving edge
+- **The paper's model was designed for this tier**: Replicating it first on 500/1000/Slams makes sense before extending down
+
+**Recommended approach when the time comes:**
+
+1. **First, measure market efficiency by tier**: Compare bookmaker calibration accuracy at 250 vs 500 vs 1000 vs Slam. If the 250 calibration curve is flatter (less accurate), that's direct evidence of inefficiency — not just a hunch.
+
+2. **Use a model that degrades gracefully with thin data**: Elo handles sparse data better than serve/return stats. A 250-specific Elo model (or a hybrid) is better suited than the MC engine.
+
+3. **Focus on specific subsets, not all 250s**: If there's an edge, it's probably in a narrow slice — e.g., clay-court 250s in South America where rankings underweight surface ability, or home-country advantage at smaller events.
+
+4. **Add 250s to tournament filter only after baseline model is validated**: Don't mix tiers in early modeling. First get a clean, validated baseline on the paper's dataset (500/1000/Slams), then treat 250s as a separate out-of-sample test.
+
+**Current status:** Deferred. Revisit after paper replication is complete and we have a validated baseline.
+
+---
+
 ## Session Summary - 2026-01-29
 
 ### What Was Completed

@@ -2,7 +2,7 @@
 # Core simulation functions: point → game → set → match
 #
 # Usage:
-#   source("r_analysis/simulator/01_mc_engine.R")
+#   source("src/models/monte_carlo/mc_engine.R")
 #   result <- simulate_match(player1_stats, player2_stats, best_of = 3)
 
 # ============================================================================

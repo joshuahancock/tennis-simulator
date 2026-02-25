@@ -3,13 +3,13 @@
 # This script runs the complete analysis pipeline from raw data to final outputs.
 #
 # Usage:
-#   Rscript code/run_analysis.R
+#   Rscript scripts/run_analysis.R
 #   # Or in R console:
-#   source("code/run_analysis.R")
+#   source("scripts/run_analysis.R")
 #
 # Prerequisites:
 #   1. Raw data in data/raw/ (ATP/WTA match data, betting data)
-#   2. R packages installed (see code/README.md)
+#   2. R packages installed (see scripts/README.md)
 #
 # Output:
 #   - Backtest results saved to data/processed/
@@ -68,7 +68,7 @@ suppressPackageStartupMessages({
 cat("Loading simulator code...\n")
 
 # The main backtest script sources all dependencies
-source("r_analysis/simulator/06_backtest.R")
+source("src/backtesting/backtest.R")
 
 cat("Simulator code loaded successfully.\n\n")
 

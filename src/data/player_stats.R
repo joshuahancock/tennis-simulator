@@ -2,7 +2,7 @@
 # Loads and processes player serve/return statistics by surface
 #
 # Usage:
-#   source("r_analysis/simulator/02_player_stats.R")
+#   source("src/data/player_stats.R")
 #   stats <- load_player_stats()
 #   p_stats <- get_player_stats("Novak Djokovic", surface = "Hard", stats_db = stats)
 
@@ -10,7 +10,7 @@ library(tidyverse)
 library(lubridate)
 
 # Source utility functions for similarity calculations
-source("r_analysis/utils.R")
+source("src/utils/utils.R")
 
 # ============================================================================
 # CONFIGURATION

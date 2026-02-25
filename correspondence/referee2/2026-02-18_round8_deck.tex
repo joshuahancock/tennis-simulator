@@ -1,0 +1,408 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{array}
+
+\definecolor{posgreen}{RGB}{34,139,34}
+\definecolor{negred}{RGB}{178,34,34}
+\definecolor{warncolor}{RGB}{204,102,0}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\title{Referee Report --- Round 8}
+\subtitle{Tennis Match Simulator: ROI Calculations \& Vig Handling}
+\author{Referee 2}
+\date{2026-02-18}
+
+\begin{document}
+
+% -----------------------------------------------
+% SLIDE 1: Title
+% -----------------------------------------------
+\begin{frame}
+\titlepage
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 2: Executive Summary
+% -----------------------------------------------
+\begin{frame}[t]{Verdict: Accept with Minor Revisions}
+
+\textbf{Focus:} Author-identified vig calculation error --- independently audited and confirmed.
+
+\vspace{0.8em}
+\textbf{Key findings:}
+
+\begin{itemize}
+  \item \textbf{Main pipeline (\texttt{06\_backtest.R}): CORRECT.} ROI formula uses actual betting odds throughout.
+  \item \textbf{Trajectory scripts: CONFIRMED BUG.} Three scripts use vig-removed ``fair'' odds instead of actual Pinnacle odds to compute profit. This inflated ROI by $\sim$11pp (+10.7\% apparent $\to$ $-$0.7\% actual).
+  \item \textbf{Hardcoded OOS value not corrected.} \texttt{trajectory\_ci.R} hardcodes the erroneous $+21.0\%$ 2025 OOS ROI. Corrected OOS result is unknown.
+  \item \textbf{Edge definition inconsistency.} Two different ``edge'' definitions in use across the codebase --- not a bug in ROI, but thresholds are not comparable across scripts.
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{No new major methodological flaws.} Infrastructure is sound.
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 3: Raw Data Verification
+% -----------------------------------------------
+\begin{frame}[t]{Raw Data: Pinnacle Vig Is 2.8--3.0\%, B365 Is 5.5--6.0\%}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+
+\textbf{Verified from \texttt{2024.xlsx}:}
+
+\vspace{0.5em}
+{\small\begin{tabular}{p{2.3cm}ccc}
+\toprule
+Match & PSW & PSL & Vig \\
+\midrule
+Popyrin & 1.72 & 2.23 & 3.0\% \\
+Shevchenko & 1.78 & 2.14 & 2.9\% \\
+Safiullin & 2.31 & 1.68 & 2.8\% \\
+\bottomrule
+\end{tabular}}
+
+\vspace{0.6em}
+{\small For same matches (B365):}
+
+{\small\begin{tabular}{p{2.3cm}ccc}
+\toprule
+Match & B365W & B365L & Vig \\
+\midrule
+Popyrin & 1.62 & 2.30 & 5.6\% \\
+Shevchenko & 1.62 & 2.30 & 5.6\% \\
+Safiullin & 2.30 & 1.62 & 5.6\% \\
+\bottomrule
+\end{tabular}}
+
+\column{0.44\textwidth}
+
+\textbf{Implication:}
+
+Falling back from Pinnacle to B365 \textbf{doubles} the vig hurdle:
+\begin{itemize}
+  \item Pinnacle: 3\% vig $\to$ each side pays $\approx1.5\%$
+  \item B365: 6\% vig $\to$ each side pays $\approx3\%$
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Unresolved:} What fraction of H1 2024 matches use Pinnacle vs.\ B365? If a material fraction uses B365, ROI claims are understated for a Pinnacle-only comparison.
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 4: Main Pipeline ROI is Correct
+% -----------------------------------------------
+\begin{frame}[t]{Main Backtest ROI Formula Is Correctly Implemented}
+
+\texttt{06\_backtest.R}: \texttt{simulate\_betting()} lines 578--586:
+
+\vspace{0.5em}
+{\small\texttt{flat\_profit = if\_else(bet\_won, (bet\_odds-1)*stake, -stake)}}\\
+{\small\texttt{roi\_flat = sum(flat\_profit) / (n\_bets * stake)}}
+
+\vspace{0.8em}
+
+\begin{columns}[T]
+\column{0.5\textwidth}
+\textbf{Why raw implied prob is correct for EV:}
+
+A bet has positive EV if and only if:
+\[
+\text{model\_prob} > \frac{1}{\text{odds}}
+\]
+
+The vig is already embedded in the offered odds. ``Raw implied prob'' $= 1/\text{odds}$ is exactly the breakeven probability. No further vig subtraction is needed.
+
+\column{0.46\textwidth}
+
+\textbf{Verified formula:}
+
+\begin{tabular}{lc}
+\toprule
+Component & Status \\
+\midrule
+Profit on win & $(o-1) \times \text{stake}$ \textcolor{posgreen}{\checkmark} \\
+Loss on loss & $-\text{stake}$ \textcolor{posgreen}{\checkmark} \\
+ROI denominator & $n \times \text{stake}$ \textcolor{posgreen}{\checkmark} \\
+Kelly formula & $(bp-q)/b$ \textcolor{posgreen}{\checkmark} \\
+Bootstrap CI & Percentile method \textcolor{posgreen}{\checkmark} \\
+\bottomrule
+\end{tabular}
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 5: The Bug Explained
+% -----------------------------------------------
+\begin{frame}[t]{The Trajectory Bug: Fair Odds Inflate Each Winning Bet by $\sim$3\%}
+
+\begin{columns}[T]
+\column{0.5\textwidth}
+
+\textbf{What the code does (wrong):}
+\vspace{0.3em}
+
+\begin{flushleft}
+{\small\texttt{mkt\_prob\_w <- (1/PSW)/(1/PSW+1/PSL)}}
+
+{\small\texttt{elo\_opp\_odds <- 1/(1 - mkt\_prob\_w)}}
+
+{\small\texttt{profit <- elo\_opp\_odds - 1}}
+\end{flushleft}
+
+\vspace{0.5em}
+\textbf{What it should do:}
+
+\begin{flushleft}
+{\small\texttt{elo\_opp\_odds <- PSL \quad\# actual}}
+
+{\small\texttt{profit <- elo\_opp\_odds - 1}}
+\end{flushleft}
+
+\column{0.46\textwidth}
+
+\textbf{Numerical example (PSL = 3.50):}
+
+\vspace{0.5em}
+{\footnotesize\begin{tabular}{lcc}
+\toprule
+ & Bugged & Correct \\
+\midrule
+Raw prob & 1/3.50=0.286 & --- \\
+Vig-removed & 0.286/1.03 & --- \\
+Odds used & 3.606 & \textbf{3.500} \\
+Profit if won & \textcolor{negred}{2.606} & \textcolor{posgreen}{2.500} \\
+\bottomrule
+\end{tabular}}
+
+\vspace{0.5em}
+Each winning bet reports \textbf{0.106 units too much}.
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 6: Why the Impact Is 11pp, Not Just 3%
+% -----------------------------------------------
+\begin{frame}[t,shrink=5]{11pp ROI Swing Comes From Two Compounding Effects}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+
+\textbf{Effect 1: Odds inflation ($\approx$4--5pp)}
+
+Fair odds $\approx$ actual odds $\times$ (1 + vig). For the 3.0--5.0 range:
+\begin{itemize}
+  \item Absolute inflation $\approx$ 0.09--0.15 per unit
+  \item At 30\% win rate: $\sim$3--5\% ROI inflation
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Effect 2: Sample composition shift ($\approx$6--7pp)}
+
+The odds filter \texttt{elo\_opp\_odds >= 3.0} was applied to \textbf{fair} odds, not actual.
+\begin{itemize}
+  \item PSL 2.85--2.99 matches: fair odds $\geq$ 3.0 $\to$ \textit{wrongly included}
+  \item These matches have 33--35\% win prob vs.\ 27\% average
+  \item Sample changed from N=300 (actual) to N=272 (bugged)
+\end{itemize}
+
+\column{0.44\textwidth}
+
+\textbf{Summary of impact:}
+
+\vspace{0.5em}
+\begin{tabular}{lcc}
+\toprule
+Metric & Bugged & Corrected \\
+\midrule
+N & 272 & \textbf{300} \\
+Win rate & 30.2\% & \textbf{27.3\%} \\
+Avg odds & 3.76 & \textbf{3.74} \\
+\midrule
+\textbf{ROI} & \textcolor{negred}{+10.7\%} & \textcolor{posgreen}{$-$0.7\%} \\
+Years pos & 4/4 & \textbf{1/4} \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\textbf{No edge exists.} The win rate barely exceeds breakeven (27.3\% vs.\ 26.7\%), and the CI is $[-19.3\%, +17.9\%]$.
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 7: Scope of Infection
+% -----------------------------------------------
+\begin{frame}[t]{Three Scripts Infected; Main Pipeline and Others Are Clean}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+
+\textbf{Scripts with vig bug (profit inflated):}
+
+\vspace{0.3em}
+{\scriptsize\begin{tabular}{p{4.8cm}c}
+\toprule
+Script & Status \\
+\midrule
+\texttt{trajectory\_contrarian.R:25--27} & \textcolor{negred}{\texttimes} \\
+\texttt{trajectory\_best\_subset.R:19--21} & \textcolor{negred}{\texttimes} \\
+\texttt{trajectory\_ci.R:11, 47} & \textcolor{negred}{\texttimes} \\
+\bottomrule
+\end{tabular}}
+
+\column{0.44\textwidth}
+
+\textbf{Scripts with correct ROI:}
+
+\vspace{0.3em}
+{\scriptsize\begin{tabular}{p{4.8cm}c}
+\toprule
+Script & Status \\
+\midrule
+\texttt{06\_backtest.R} & \textcolor{posgreen}{\checkmark} \\
+\texttt{validate\_elo\_betting.R} & \textcolor{posgreen}{\checkmark} \\
+\texttt{find\_betting\_edge\_subsets.R} & \textcolor{posgreen}{\checkmark} \\
+\texttt{calibration\_edge\_deep.R} & \textcolor{posgreen}{\checkmark} \\
+\texttt{test\_2025\_oos.R} & \textcolor{posgreen}{\checkmark} \\
+\texttt{prospective\_paper\_trade.R} & \textcolor{posgreen}{\checkmark} \\
+\bottomrule
+\end{tabular}}
+
+\end{columns}
+
+\vspace{0.8em}
+\textbf{Unresolved:} \texttt{trajectory\_ci.R} line 47 hardcodes the erroneous 2025 OOS ROI of $+21.0\%$. The corrected 2025 trajectory OOS result has \textbf{not been computed}.
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 8: Edge Definition Inconsistency
+% -----------------------------------------------
+\begin{frame}[t]{Two Different ``Edge'' Definitions Create Non-Comparable Thresholds}
+
+\begin{columns}[T]
+\column{0.50\textwidth}
+
+\textbf{Definition A: Raw edge} (main backtest)
+
+\vspace{0.3em}
+\texttt{edge = model\_prob - 1/odds}
+
+\vspace{0.4em}
+\textit{Interpretation:} how much model exceeds the exact breakeven probability. Edge $> 0$ guarantees positive EV.
+
+\vspace{0.8em}
+\textbf{Definition B: Fair edge} (analysis scripts)
+
+\vspace{0.3em}
+{\small\texttt{mkt\_prob = (1/w)/(1/w + 1/l)}}\\
+{\small\texttt{edge = model\_prob - mkt\_prob}}
+
+\vspace{0.4em}
+\textit{Interpretation:} how much model exceeds the vig-removed market belief. Edge $> 0$ does \textbf{not} guarantee positive EV.
+
+\column{0.46\textwidth}
+
+\textbf{Numerical comparison (3\% vig, 50/50 match):}
+
+\vspace{0.5em}
+\begin{tabular}{lcc}
+\toprule
+Model prob & Raw edge & Fair edge \\
+\midrule
+0.45 & $-6.5\%$ & $-5.0\%$ \\
+0.515 & 0.0\% & $+1.5\%$ \\
+0.53 & $+1.5\%$ & $+3.0\%$ \\
+0.55 & $+3.5\%$ & $+5.0\%$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+``Fair edge $> 0$'' can mean \textbf{negative EV}\\ (when fair edge $< \text{fair\_prob} \times \text{vig}$).
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 9: Calibration Edge --- Residual Concern
+% -----------------------------------------------
+\begin{frame}[t]{Calibration Edge Analysis May Admit Negative-EV Bets}
+
+\texttt{calibration\_edge\_deep.R} computes \texttt{dog\_edge} against \textbf{vig-removed} market probabilities, then bets at \textbf{actual odds}.
+
+\vspace{0.8em}
+
+\begin{columns}[T]
+\column{0.52\textwidth}
+
+\textbf{Scenario where this matters:}
+
+\vspace{0.3em}
+Actual underdog odds = 2.20, Pinnacle vig = 3\%
+\begin{itemize}
+  \item Raw implied prob = 1/2.20 = \textbf{0.455}
+  \item Fair implied prob = 0.455/1.03 = \textbf{0.441}
+  \item Model says: 0.448
+\end{itemize}
+
+\vspace{0.3em}
+\texttt{dog\_edge} $= 0.448 - 0.441 = +0.7\%$ \textcolor{warncolor}{(passes filter)}\\
+Raw edge $= 0.448 - 0.455 = -0.7\%$ \textcolor{negred}{(negative EV)}
+
+\column{0.44\textwidth}
+
+\textbf{Consequence:}
+
+The ``Odds 2.0--2.5, Edge 0--10\%'' subset includes bets that are genuinely negative EV. The 2025 OOS failure ($-2.29\%$) may partly reflect this: some included bets never had positive EV.
+
+\vspace{0.5em}
+\textbf{Recommendation:} Recompute using \texttt{dog\_edge = model - (1/odds)} and compare. If the in-sample ROI drops, the vig-adjusted filter was doing real work.
+
+\end{columns}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 10: Recommendations
+% -----------------------------------------------
+\begin{frame}[t]{Recommendations (Prioritized)}
+
+\begin{enumerate}
+
+\item \textbf{Fix \texttt{trajectory\_ci.R}.} Line 47 hardcodes $+21.0\%$ OOS ROI from bugged calculation. Rerun 2025 trajectory analysis with actual PSL/PSW odds and update the CI file. Report the corrected OOS result.
+
+\vspace{0.4em}
+\item \textbf{Report Pinnacle vs.\ B365 match breakdown.} The vig difference (3\% vs.\ 6\%) is material. Tabulate N and ROI by bookmaker source.
+
+\vspace{0.4em}
+\item \textbf{Document edge definition in each script.} Add a comment at the top of analysis scripts noting whether edge is vs.\ raw or vig-adjusted implied probability.
+
+\vspace{0.4em}
+\item \textbf{Recompute calibration edge with raw-edge filter.} Test whether the in-sample +5.16\% ROI survives when only genuinely positive-EV bets are included.
+
+\vspace{0.4em}
+\item \textbf{Clarify paper trade Elo update.} \texttt{prospective\_paper\_trade.R} updates Elo during the OOS period. Document whether this is intentional and how it interacts with the ``frozen model'' claim.
+
+\end{enumerate}
+
+\end{frame}
+
+\end{document}

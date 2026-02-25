@@ -28,7 +28,7 @@ install.packages("renv")
 renv::restore()
 
 # If setting up for the first time:
-source("code/setup_renv.R")
+source("scripts/setup_renv.R")
 ```
 
 ### Data
@@ -53,19 +53,19 @@ The following data must be present:
 From the project root directory:
 
 ```bash
-Rscript code/run_analysis.R
+Rscript scripts/run_analysis.R
 ```
 
 Or in R:
 
 ```r
 setwd("path/to/tennis-simulator")
-source("code/run_analysis.R")
+source("scripts/run_analysis.R")
 ```
 
 ### Configuration
 
-Edit `code/run_analysis.R` to change:
+Edit `scripts/run_analysis.R` to change:
 
 - `BACKTEST_START_DATE` / `BACKTEST_END_DATE` - Date range to analyze
 - `TOUR` - "ATP" or "WTA"
@@ -79,30 +79,43 @@ Results are saved to `data/processed/backtest_[tour]_[dates].rds`
 ## Code Structure
 
 ```
-r_analysis/simulator/
-├── 01_mc_engine.R           # Core Monte Carlo simulation
-├── 02_player_stats.R        # Player statistics calculation
-├── 03_match_probability.R   # Win probability estimation
-├── 04_similarity_adjustment.R # Style-based adjustments
-├── 05_betting_data.R        # Betting odds integration
-└── 06_backtest.R            # Backtesting framework
+src/
+├── data/
+│   ├── player_stats.R       # Player statistics calculation
+│   ├── betting_data.R       # Betting odds integration
+│   └── date_alignment.R     # Date alignment (leakage fix)
+├── models/
+│   ├── monte_carlo/
+│   │   ├── mc_engine.R          # Core Monte Carlo simulation
+│   │   ├── match_probability.R  # Win probability estimation
+│   │   └── similarity.R         # Style-based adjustments
+│   └── elo/
+│       └── elo_ratings.R    # Elo rating system
+├── backtesting/
+│   └── backtest.R           # Backtesting framework (sources all above)
+└── utils/
+    └── utils.R              # Shared utilities
 
-code/
+scripts/
 ├── run_analysis.R           # Master script (run this)
-├── README.md                # This file
-└── replication/             # Cross-language replication scripts
+├── compare_models.R         # Elo vs MC comparison
+├── validate_elo_betting.R   # Edge validation
+└── README.md                # This file
+
+correspondence/referee2/replication/  # Referee 2's cross-language scripts
 ```
 
 ## Execution Order
 
-The scripts are designed to be sourced in order via `06_backtest.R`:
+`src/backtesting/backtest.R` sources all dependencies in correct order:
 
-1. `01_mc_engine.R` - Defines point/game/set/match simulation
-2. `02_player_stats.R` - Loads and calculates player statistics
-3. `03_match_probability.R` - Runs Monte Carlo simulations
-4. `04_similarity_adjustment.R` - Optional style adjustments
-5. `05_betting_data.R` - Loads betting odds
-6. `06_backtest.R` - Orchestrates backtesting (sources 01-05)
+1. `src/models/monte_carlo/mc_engine.R` - Point/game/set/match simulation
+2. `src/data/player_stats.R` - Player statistics
+3. `src/models/monte_carlo/match_probability.R` - Win probability
+4. `src/models/monte_carlo/similarity.R` - Style adjustments
+5. `src/data/betting_data.R` - Betting odds
+6. `src/models/elo/elo_ratings.R` - Elo ratings
+7. `src/data/date_alignment.R` - Date alignment
 
 ## Reproducibility
 

@@ -1,5 +1,5 @@
 # Shared Utility Functions for Tennis Similarity Analysis
-# Source this file in other scripts: source("r_analysis/utils.R")
+# Source this file in other scripts: source("src/utils/utils.R")
 
 library(tidyverse)
 

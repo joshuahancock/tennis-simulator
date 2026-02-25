@@ -2,18 +2,20 @@
 # Evaluate model performance against historical betting lines
 #
 # Usage:
-#   source("r_analysis/simulator/06_backtest.R")
+#   source("src/backtesting/backtest.R")
 #   results <- backtest_period("2022-01-01", "2023-12-31", model = "base")
 
 library(tidyverse)
 library(lubridate)
 
 # Source required files
-source("r_analysis/simulator/01_mc_engine.R")
-source("r_analysis/simulator/02_player_stats.R")
-source("r_analysis/simulator/03_match_probability.R")
-source("r_analysis/simulator/04_similarity_adjustment.R")
-source("r_analysis/simulator/05_betting_data.R")
+source("src/models/monte_carlo/mc_engine.R")
+source("src/data/player_stats.R")
+source("src/models/monte_carlo/match_probability.R")
+source("src/models/monte_carlo/similarity.R")
+source("src/data/betting_data.R")
+source("src/models/elo/elo_ratings.R")
+source("src/data/date_alignment.R")
 
 # ============================================================================
 # CONFIGURATION
@@ -49,13 +51,15 @@ BACKTEST_N_SIMS <- 1000
 #' @param match_row Row from betting data
 #' @param stats_db Stats database
 #' @param feature_db Feature database (for similarity model)
-#' @param model Model type: "base", "historical", "style", or "combined"
+#' @param elo_db Elo database (for elo model)
+#' @param model Model type: "base", "elo", "historical", "style", or "combined"
 #' @param n_sims Number of simulations
 #' @param stats_date_cutoff Only use stats from before this date
 #' @param use_adjustment Whether to use opponent adjustment (NULL = use global setting)
 #' @param require_player_data If TRUE, skip matches where either player lacks real data
 #' @return List with prediction results, or skipped status
 backtest_single_match <- function(match_row, stats_db, feature_db = NULL,
+                                   elo_db = NULL,
                                    model = "base", n_sims = BACKTEST_N_SIMS,
                                    stats_date_cutoff = NULL,
                                    use_adjustment = NULL,
@@ -99,6 +103,29 @@ backtest_single_match <- function(match_row, stats_db, feature_db = NULL,
           p2_source = result$p2_source
         ))
       }
+    } else if (model == "elo") {
+      # Elo-based prediction (no Monte Carlo simulation)
+      if (is.null(elo_db)) {
+        return(list(success = FALSE, error = "elo_db required for model='elo'"))
+      }
+
+      elo_result <- predict_match_elo(
+        player1 = player1,
+        player2 = player2,
+        surface = surface,
+        elo_db = elo_db,
+        use_surface_elo = TRUE
+      )
+
+      # Create a result structure compatible with MC output
+      result <- list(
+        p1_win_prob = elo_result$p1_win_prob,
+        p1_stats = list(source = elo_result$p1_info$source),
+        p2_stats = list(source = elo_result$p2_info$source),
+        p1_elo = elo_result$p1_elo,
+        p2_elo = elo_result$p2_elo,
+        elo_diff = elo_result$elo_diff
+      )
     } else {
       # Use similarity-adjusted model
       use_historical <- model %in% c("historical", "combined")
@@ -146,7 +173,7 @@ backtest_single_match <- function(match_row, stats_db, feature_db = NULL,
 #' Run backtest over a date range
 #' @param start_date Start date (string or Date)
 #' @param end_date End date (string or Date)
-#' @param model Model type: "base", "historical", "style", or "combined"
+#' @param model Model type: "base", "elo", "historical", "style", or "combined"
 #' @param tour "ATP" or "WTA"
 #' @param betting_data Pre-loaded betting data (optional)
 #' @param historical_matches Pre-loaded historical matches for stats calculation (optional)
@@ -197,7 +224,22 @@ backtest_period <- function(start_date, end_date, model = "base",
   if (is.null(historical_matches)) {
     cat("Loading historical matches for stats calculation...\n")
     if (str_to_upper(tour) == "ATP") {
-      historical_matches <- load_atp_matches(year_from = 2015, year_to = year(end_date))
+      # Try to load pre-computed aligned matches first (fastest)
+      cache_file <- "data/processed/atp_matches_aligned.rds"
+      if (file.exists(cache_file)) {
+        historical_matches <- readRDS(cache_file)
+        cat("  Loaded pre-aligned matches from cache (no leakage)\n")
+      } else if (exists("load_atp_matches_aligned")) {
+        # Fall back to runtime alignment (slower)
+        historical_matches <- load_atp_matches_aligned(
+          year_from = 2015, year_to = year(end_date),
+          betting_data = betting_data, verbose = FALSE
+        )
+        cat("  Using runtime date alignment (fixing tourney_date leakage)\n")
+      } else {
+        historical_matches <- load_atp_matches(year_from = 2015, year_to = year(end_date))
+        warning("Date alignment not available - results may have data leakage")
+      }
     } else {
       historical_matches <- load_wta_matches(year_from = 2015, year_to = year(end_date))
     }
@@ -242,6 +284,7 @@ backtest_period <- function(start_date, end_date, model = "base",
   errors <- 0
   skipped <- 0
   current_stats_db <- NULL
+  current_elo_db <- NULL
   current_stats_date <- NULL
 
   for (i in 1:n_matches) {
@@ -251,18 +294,27 @@ backtest_period <- function(start_date, end_date, model = "base",
     # Rebuild stats_db if date changed (cache for same-day matches)
     if (is.null(current_stats_date) || match_date != current_stats_date) {
       # Filter historical matches to BEFORE this match date
+      # Use actual_match_date if available (from date alignment), otherwise fall back to match_date
       cutoff_date <- match_date
+      date_col <- if ("actual_match_date" %in% names(historical_matches)) "actual_match_date" else "match_date"
+
       if (!is.null(stats_lookback_years)) {
         earliest_date <- cutoff_date - years(stats_lookback_years)
         prior_matches <- historical_matches %>%
-          filter(match_date >= earliest_date, match_date < cutoff_date)
+          filter(.data[[date_col]] >= earliest_date, .data[[date_col]] < cutoff_date)
       } else {
         prior_matches <- historical_matches %>%
-          filter(match_date < cutoff_date)
+          filter(.data[[date_col]] < cutoff_date)
       }
 
       # Build stats from prior matches only
       current_stats_db <- build_stats_db_from_matches(prior_matches, verbose = FALSE)
+
+      # Build Elo database if using Elo model
+      if (model == "elo") {
+        current_elo_db <- build_elo_db_from_matches(prior_matches, verbose = FALSE)
+      }
+
       current_stats_date <- match_date
 
       if (i == 1 || i %% progress_interval == 0) {
@@ -282,6 +334,7 @@ backtest_period <- function(start_date, end_date, model = "base",
 
     bt_result <- backtest_single_match(
       match_row, current_stats_db, feature_db,
+      elo_db = current_elo_db,
       model = model, n_sims = n_sims,
       use_adjustment = use_adjustment,
       require_player_data = require_player_data

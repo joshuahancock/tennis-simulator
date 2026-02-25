@@ -53,6 +53,8 @@ The model's "edge" comes from:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-02-09 | Fixed critical data leakage via date alignment | ATP data used `tourney_date` (tournament start) while betting used actual match dates, causing same-tournament future results to leak into Elo training |
+| 2026-02-05 | Implemented surface-specific Elo ratings | Literature review recommended Elo as skill backbone; previous backtests showed +9.6pp accuracy vs MC (now invalidated by leakage fix) |
 | 2026-01-24 | Raised MIN_TOTAL_MATCHES from 10 to 20 | Threshold analysis showed ~4pp ROI improvement with minimal accuracy loss |
 | 2026-01-24 | Added `require_player_data` flag | Tour average matches are noise; filtering improves ROI ~5pp |
 | 2026-01-23 | Implemented similarity-weighted stats fallback | More informed baseline than generic tour averages when player has <20 matches |
@@ -65,21 +67,45 @@ The model's "edge" comes from:
 Things tried but abandoned (so Claude doesn't suggest them again):
 
 - **Cross-language replication (Python/Stata)**: Not yet attempted. This is a PRIORITY for Referee 2 audit.
-- **Style-based adjustments (04_similarity_adjustment.R)**: Hardcoded multipliers didn't improve results. Needs data-driven approach.
+- **Style-based adjustments (src/models/monte_carlo/similarity.R)**: Hardcoded multipliers didn't improve results. Needs data-driven approach.
 
 ---
+
+## Directory Structure
+
+Code is organized by pipeline stage (not language). All paths relative to project root.
+
+```
+src/
+├── data/           # Shared data loading & processing
+├── models/
+│   ├── monte_carlo/   # MC simulation engine
+│   ├── elo/           # Elo rating system
+│   └── [new_model]/   # Future models go here
+├── backtesting/    # Shared backtesting framework
+└── utils/          # Shared utilities
+
+analysis/           # Research analyses (not pipeline)
+├── calibration/    edge/    model_variants/
+├── validation/     trajectory/    features/
+
+scripts/            # Top-level runners (run_analysis.R, compare_models.R, etc.)
+tests/              # Unit tests
+```
 
 ## Key Files
 
 | Purpose | File |
 |---------|------|
-| Main simulation engine | `r_analysis/simulator/01_mc_engine.R` |
-| Player statistics loader | `r_analysis/simulator/02_player_stats.R` |
-| Monte Carlo probability | `r_analysis/simulator/03_match_probability.R` |
-| Similarity adjustments | `r_analysis/simulator/04_similarity_adjustment.R` |
-| Betting data integration | `r_analysis/simulator/05_betting_data.R` |
-| Backtesting framework | `r_analysis/simulator/06_backtest.R` |
-| Shared utilities | `r_analysis/utils.R` |
+| Main simulation engine | `src/models/monte_carlo/mc_engine.R` |
+| Player statistics loader | `src/data/player_stats.R` |
+| Monte Carlo probability | `src/models/monte_carlo/match_probability.R` |
+| Similarity adjustments | `src/models/monte_carlo/similarity.R` |
+| Betting data integration | `src/data/betting_data.R` |
+| Backtesting framework | `src/backtesting/backtest.R` |
+| Elo rating system | `src/models/elo/elo_ratings.R` |
+| Date alignment | `src/data/date_alignment.R` |
+| Shared utilities | `src/utils/utils.R` |
 | Technical documentation | `docs/simulator_guide.md` |
 | Quick reference | `docs/quick_reference.md` |
 
@@ -112,36 +138,75 @@ Things tried but abandoned (so Claude doesn't suggest them again):
 ## Configuration Constants
 
 ```r
-# 02_player_stats.R
+# src/data/player_stats.R
 MIN_SURFACE_MATCHES <- 20   # Matches needed for surface-specific stats
 MIN_TOTAL_MATCHES <- 20     # Matches needed for any player stats
 SIMILARITY_TOP_N <- 10      # Similar players for weighted fallback
 
-# 06_backtest.R
+# src/backtesting/backtest.R
 EDGE_THRESHOLDS <- c(0.01, 0.03, 0.05, 0.10)
 KELLY_FRACTION <- 0.25
 STARTING_BANKROLL <- 10000
 MAX_BET_FRACTION <- 0.05
 MIN_ODDS <- 1.10
 BACKTEST_N_SIMS <- 1000
+
+# src/models/elo/elo_ratings.R
+DEFAULT_ELO <- 1500              # Starting Elo for new players
+K_FACTOR_DEFAULT <- 32           # K-factor for established players
+K_FACTOR_PROVISIONAL <- 48       # K-factor for new players (<5 matches)
+MIN_MATCHES_FOR_RATING <- 5      # Matches before player is non-provisional
+MIN_SURFACE_MATCHES_FOR_ELO <- 10  # Matches for full surface-specific weight
+ELO_SURFACES <- c("Hard", "Clay", "Grass")
 ```
 
 ---
 
 ## Current Status
 
-**Phase**: Estimation / Validation
+**Phase**: Data Leakage Fix / Re-validation
 
-**Current performance (H1 2024, real data only):**
-- Accuracy: 58.9%
-- Brier Score: 0.2336
-- ROI at 5% edge: -5.1%
-- Market baseline: 67.2%
+**CRITICAL FIX (2026-02-09):** Discovered and fixed data leakage via `tourney_date` mismatch. All previous results were inflated because:
+- ATP data used tournament START date for all matches
+- Betting data used actual match dates
+- Later-round results leaked into Elo training for earlier-round predictions
+
+**Date alignment module (`src/data/date_alignment.R`) achieves:**
+- 90.4% exact/variant date matches with betting data
+- 9.6% inferred dates (United Cup, Davis Cup not in betting data)
+
+**Previous results (INVALIDATED by leakage):**
+
+| Model | Accuracy | Brier Score | Log Loss | Status |
+|-------|----------|-------------|----------|--------|
+| Elo (surface-specific) | 68.6% | 0.2029 | 0.5913 | ❌ INVALID |
+| Monte Carlo (base) | 58.7% | 0.2338 | 0.6601 | ❌ INVALID |
+
+**Corrected results (H1 2024, full 2015+ history with cached alignment):**
+
+| Model | Accuracy | Brier Score | Log Loss | Status |
+|-------|----------|-------------|----------|--------|
+| **Elo (surface-specific)** | **60.8%** | **0.2331** | **0.6585** | ✓ CLEAN |
+| Monte Carlo (base) | 56.0% | 0.2451 | 0.6846 | ✓ CLEAN |
+| **Elo advantage** | **+4.8pp** | **-0.012** | **-0.026** | |
+
+**Leakage impact analysis:**
+
+| Model | Old (Leaky) | New (Clean) | Inflation |
+|-------|-------------|-------------|-----------|
+| Elo | 68.6% | 60.8% | -7.8pp |
+| MC | 58.7% | 56.0% | -2.7pp |
+
+**Key insights:**
+1. Elo still outperforms MC, but gap is 4.8pp (not 9.9pp as previously reported)
+2. Leakage inflated Elo more than MC (as referee predicted) because Elo is more sensitive to per-match rating updates
+3. Neither model beats the market (~67% accuracy) - no genuine betting edge exists
+4. ROI is negative at all thresholds for both models
 
 **Next priorities:**
-1. Name matching improvement (many players fail lookup due to format mismatch)
-2. Revisit additive adjustment formula (may be too severe)
-3. Cross-language replication (Python) for Referee 2 audit
+1. Investigate calibration issues (Elo underestimates favorites, overestimates underdogs)
+2. Consider hybrid Elo+MC model
+3. Add recency weighting to Elo
 
 ---
 
@@ -159,7 +224,7 @@ correspondence/referee2/
 
 Replication scripts created by Referee 2 are stored at:
 ```
-code/replication/
+correspondence/referee2/replication/
 ├── referee2_replicate_mc_engine.py
 ├── referee2_replicate_mc_engine.do
 └── ...
@@ -167,13 +232,13 @@ code/replication/
 
 **Current Status:** Accepted with Minor Revisions (Round 2 complete)
 
-**Critical Rule:** Referee 2 NEVER modifies author code. It only reads, runs, and creates its own replication scripts in `code/replication/`. Only the author (you) modifies your own code in response to referee concerns.
+**Critical Rule:** Referee 2 NEVER modifies author code. It only reads, runs, and creates its own replication scripts in `correspondence/referee2/replication/`. Only the author (you) modifies your own code in response to referee concerns.
 
 ---
 
 ## Known Issues / Technical Debt
 
-1. **Hardcoded tour averages** in `01_mc_engine.R` lines 45, 68: `avg_return_vs_first <- 0.35`, `avg_return_vs_second <- 0.50`. Should be calculated dynamically.
+1. **Hardcoded tour averages** in `src/models/monte_carlo/mc_engine.R` lines 45, 68: `avg_return_vs_first <- 0.35`, `avg_return_vs_second <- 0.50`. Should be calculated dynamically.
 
 2. **Name matching ~90%** - Edge cases not handled: multi-initial names ("Kwon S.W."), hyphenated names ("Auger-Aliassime F."), apostrophes ("O'Connell C.").
 
@@ -187,7 +252,7 @@ code/replication/
 
 ## Notes for Claude
 
-- The main R scripts are in `r_analysis/simulator/`, NOT in `src/` (Python scaffolding only)
+- Core pipeline code is in `src/` (by stage), analysis scripts in `analysis/` (by theme), runners in `scripts/`, tests in `tests/`
 - Session notes are in `docs/notes/session_notes.md` - update after significant work
 - Code changes go in `docs/notes/changelog.md`
 - When running backtests, use `require_player_data = TRUE` to filter out tour average matches

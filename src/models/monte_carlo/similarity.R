@@ -4,14 +4,14 @@
 # 2. Style-Adjusted Probabilities: Adjust serve/return based on opponent profiles
 #
 # Usage:
-#   source("r_analysis/simulator/04_similarity_adjustment.R")
+#   source("src/models/monte_carlo/similarity.R")
 #   adjusted <- get_similarity_adjusted_stats(player_a, player_b, stats_db, feature_db)
 
 library(tidyverse)
 
 # Source required files
-source("r_analysis/utils.R")
-source("r_analysis/simulator/02_player_stats.R")
+source("src/utils/utils.R")
+source("src/data/player_stats.R")
 
 # ============================================================================
 # CONFIGURATION
@@ -645,7 +645,7 @@ simulate_match_probability_adjusted <- function(player1, player2,
   }
 
   # Run simulations
-  source("r_analysis/simulator/01_mc_engine.R")
+  source("src/models/monte_carlo/mc_engine.R")
 
   if (verbose) cat(sprintf("Running %s simulations...\n", format(n_sims, big.mark = ",")))
 

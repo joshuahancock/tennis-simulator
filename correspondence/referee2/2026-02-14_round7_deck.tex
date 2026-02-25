@@ -1,0 +1,420 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{array}
+
+\definecolor{posgreen}{RGB}{34,139,34}
+\definecolor{negred}{RGB}{178,34,34}
+\definecolor{warncolor}{RGB}{204,102,0}
+\definecolor{tierone}{RGB}{0,100,0}
+\definecolor{tiertwo}{RGB}{180,120,0}
+\definecolor{tierthree}{RGB}{140,140,140}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\title{Referee Report --- Round 7}
+\subtitle{Tennis Match Simulator}
+\author{Referee 2}
+\date{2026-02-14}
+
+\begin{document}
+
+% -----------------------------------------------
+% SLIDE 1: Title
+% -----------------------------------------------
+\begin{frame}
+\titlepage
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 2: Executive Summary
+% -----------------------------------------------
+\begin{frame}[t]{Verdict: Accept with Minor Revisions}
+
+\textbf{The project is methodologically sound.} Data integrity is confirmed, diagnostics are honest, and 17 analysis scripts cover extensive ground.
+
+\vspace{0.8em}
+\textbf{Key findings this round:}
+
+\begin{itemize}
+  \item \textbf{K-factor tested}: K=64 gives +0.4pp accuracy but worse calibration. Trajectory lag not solved by K alone.
+  \item \textbf{Calibration curve}: Systematic overconfidence on favorites, underconfidence on underdogs. This is the most exploitable signal.
+  \item \textbf{``Agree but less confident''}: +6.4\% ROI (N=256, p=0.041) --- promising but needs multi-year validation.
+  \item \textbf{Multiple testing}: 50+ subsets tested without correction. The p=0.041 signal is not distinguishable from noise in isolation.
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Core recommendation:} Shift from broad scanning to \textbf{depth on one signal}. Implement Platt scaling, validate across years, paper-trade prospectively.
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 3: The Calibration Signal
+% -----------------------------------------------
+\begin{frame}[t]{Elo's Calibration Bias Is the Most Exploitable Signal}
+
+\begin{columns}[T]
+\column{0.48\textwidth}
+
+\begin{table}
+\centering
+\footnotesize
+\begin{tabular}{p{2.2cm}rrr}
+\toprule
+Range & Predicted & Actual & Error \\
+\midrule
+0--30\% & 20.3\% & 26.8\% & \textcolor{posgreen}{+6.5pp} \\
+40--60\% & 50.1\% & 50.1\% & $\pm$0.5pp \\
+70--100\% & 76.9\% & 70.7\% & \textcolor{negred}{$-$6.2pp} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.6em}
+\textbf{Pattern:} Elo overestimates the gap between favorites and underdogs by 6+ percentage points at the extremes.
+
+\column{0.48\textwidth}
+
+\textbf{Why this matters for betting:}
+
+\begin{itemize}
+  \item If Elo says 80\%, reality is $\sim$72\%
+  \item If Elo says 25\%, reality is $\sim$32\%
+  \item Underdogs are \textit{worth more} than Elo thinks
+  \item Favorites are \textit{worth less} than Elo thinks
+\end{itemize}
+
+\vspace{0.6em}
+\textbf{Fix:} Platt scaling \\
+\texttt{cal = plogis(a + b*qlogis(elo))} \\
+\textit{5 lines of R code. Not yet implemented.}
+
+\end{columns}
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 4: K-Factor Results
+% -----------------------------------------------
+\begin{frame}[t]{K-Factor Sensitivity: Accuracy vs Calibration Tradeoff}
+
+\begin{columns}[T]
+\column{0.45\textwidth}
+
+\begin{table}
+\centering
+\begin{tabular}{crr}
+\toprule
+K & Accuracy & Brier \\
+\midrule
+24 & 63.7\% & \textbf{0.2162} \\
+32 & 63.8\% & 0.2164 \\
+48 & 63.8\% & 0.2179 \\
+64 & \textbf{64.2\%} & 0.2203 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{0.5em}
+\footnotesize
+Higher K $\rightarrow$ more decisive (correct direction more often) but less calibrated (worse probability estimates).
+
+\column{0.50\textwidth}
+
+\textbf{Insight:} K-factor alone does not solve trajectory lag.
+
+\vspace{0.4em}
+K=64 gains only +0.4pp accuracy while losing 0.004 Brier. The inertia from accumulated rating capital requires \textbf{structural} changes, not parameter tuning:
+
+\begin{itemize}
+  \item Scoreline-weighted updates (Angelini WElo)
+  \item Time-decay on older matches
+  \item Dual short/long-term Elo
+\end{itemize}
+
+\vspace{0.4em}
+\textit{The author correctly concluded this. The referee concurs.}
+
+\end{columns}
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 5: The Most Promising Edge Signal
+% -----------------------------------------------
+\begin{frame}[t]{Best Signal: ``Elo Agrees but Is Less Confident''}
+
+\begin{columns}[T]
+\column{0.45\textwidth}
+
+\begin{table}
+\centering
+\footnotesize
+\begin{tabular}{p{3.0cm}r}
+\toprule
+Metric & Value \\
+\midrule
+Filter & Agree, Elo 0--5pp\\
+       & less confident \\
+N & 256 \\
+Win rate & 72.3\% \\
+Breakeven & 67.0\% \\
+\textbf{ROI} & \textbf{+6.4\%} \\
+p-value & 0.041 \\
+\midrule
+Best sub-segment & Odds 1.7--2.0 \\
+Sub-segment ROI & +16.6\% \\
+Sub-segment N & 49 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\column{0.50\textwidth}
+
+\textbf{Logic:} When Elo agrees with the market's pick but assigns a lower probability, the market may be overpricing that favorite.
+
+\vspace{0.5em}
+\textbf{This connects to calibration:} \\
+Elo overestimates favorites $\rightarrow$ when Elo says ``favorite, but less confident,'' it may be reflecting reality more accurately than the market.
+
+\vspace{0.6em}
+\textcolor{negred}{\textbf{Caution:}}
+\begin{itemize}
+  \item p=0.041 on one period
+  \item 50+ subsets tested (no correction)
+  \item N=49 sub-segment is too small
+  \item \textbf{Needs multi-year validation}
+\end{itemize}
+
+\end{columns}
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 6: Edge Tiering
+% -----------------------------------------------
+\begin{frame}[t]{Edge Signals: Tiered Assessment}
+
+\footnotesize
+
+\textbf{\textcolor{tierone}{Tier 1: Structurally Sound, Needs Validation}}
+
+\begin{tabular}{p{4.0cm}p{3.5cm}p{4.5cm}}
+\toprule
+Signal & In-Sample & Action Needed \\
+\midrule
+Agree + less confident & +6.4\% ROI (N=256) & Multi-year validation \\
+Calibration correction & Implied by cal. table & Implement Platt scaling \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\textbf{\textcolor{tiertwo}{Tier 2: Interesting but Fragile}}
+
+\begin{tabular}{p{4.0cm}p{3.5cm}p{4.5cm}}
+\toprule
+Signal & In-Sample & Issue \\
+\midrule
+Height in R vs R & +1.75\% (N=2,390) & Uses ex-post winner \\
+Clay Masters & +13.5\% (N=53) & N too small \\
+Heavy favorites & +2.0\% & Vig kills margin \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\textbf{\textcolor{tierthree}{Tier 3: Dead Ends (Correctly Identified)}}
+
+\begin{tabular}{p{4.0cm}p{8.0cm}}
+\toprule
+Signal & Conclusion \\
+\midrule
+Fatigue/scheduling & Market prices efficiently \\
+L vs R matchups & Consistent negative Elo ROI \\
+Elo disagreements & Anti-informative (34.7\%) \\
+\bottomrule
+\end{tabular}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 7: Multiple Testing Problem
+% -----------------------------------------------
+\begin{frame}[t]{50+ Subset Tests Require Multiple Testing Correction}
+
+\footnotesize
+\begin{columns}[T]
+\column{0.45\textwidth}
+
+\textbf{Subsets tested (partial list):}
+\begin{itemize}\setlength\itemsep{0pt}
+  \item 4 K-factor values
+  \item 4+ edge thresholds
+  \item Agreement/disagreement
+  \item 5+ confidence buckets
+  \item 4 tournament levels, 3 surfaces
+  \item 4+ odds ranges
+  \item Handedness, height, fatigue
+  \item Match load, Clay Masters
+  \item Various combinations
+\end{itemize}
+
+\column{0.50\textwidth}
+
+\textbf{At $\alpha$ = 0.05 with 50 tests:}
+\begin{itemize}\setlength\itemsep{0pt}
+  \item Expected false positives: $\sim$2.5
+  \item Bonferroni threshold: 0.001
+  \item Best p-value found: 0.041
+  \item \textcolor{negred}{Does not survive correction}
+\end{itemize}
+
+\vspace{0.4em}
+\textbf{This does not mean the signal is false.}
+
+\vspace{0.2em}
+It means single-period evidence is insufficient. The correct response is \textbf{multi-year replication}, not tighter p-values from the same data.
+
+\end{columns}
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 8: Untapped Literature Directions
+% -----------------------------------------------
+\begin{frame}[t]{Literature Identifies High-Value Upgrades Not Yet Attempted}
+
+\scriptsize
+
+\begin{tabular}{p{3.2cm}p{4.2cm}p{4.6cm}}
+\toprule
+Paper / Method & What It Does & Why It Matters \\
+\midrule
+\textbf{Platt scaling} & Corrects calibration curve via logistic transform & Directly exploits the 6pp calibration bias. 5 lines of R code. \\
+\addlinespace
+\textbf{Angelini WElo} & Weights Elo updates by scoreline margin & 6-0 6-1 updates more than 7-6 7-6. Addresses trajectory lag. \\
+\addlinespace
+\textbf{Ingram Bayesian} & Latent serve/return skills with time evolution, surface effects & Direct upgrade for MC engine. Separates serve from return skill. \\
+\addlinespace
+\textbf{Gorgi et al.} & State-space model for dynamic surface-specific abilities & Proper statistical framework for the dual Elo concept. \\
+\addlinespace
+\textbf{Prieto-Lage} & Point-win probability varies by rally length and surface & Moves MC engine beyond iid points at low implementation cost. \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\textbf{Priority:} Platt scaling (immediate), then WElo scoreline weights (medium-term).
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 9: The Path Forward
+% -----------------------------------------------
+\begin{frame}[t]{Recommended Path: Depth Over Breadth}
+
+\small
+The edge-hunting phase has been \textbf{broad but shallow}: many dimensions tested, none exhausted.
+
+\vspace{0.4em}
+\textbf{Phase 1: Calibration Correction (Immediate)}
+\begin{enumerate}\setlength\itemsep{0pt}
+  \item Implement Platt scaling: \texttt{cal = plogis(a + b * qlogis(elo))}
+  \item Cross-validate on 2021--2023, test on H1 2024
+  \item Recalculate all betting signals with calibrated probabilities
+\end{enumerate}
+
+\vspace{0.3em}
+\textbf{Phase 2: Signal Validation (1--2 sessions)}
+\begin{enumerate}\setlength\itemsep{0pt}
+  \item Multi-year test of ``agree but less confident'' across 2021--2024
+  \item Apply Holm-Bonferroni correction, report adjusted p-values
+  \item Document results (positive or negative) in \texttt{model\_analysis.md}
+\end{enumerate}
+
+\vspace{0.3em}
+\textbf{Phase 3: Prospective Test (Definitive)}
+\begin{enumerate}\setlength\itemsep{0pt}
+  \item Freeze all parameters at end of H1 2024
+  \item Paper-trade H2 2024 with zero retrospective adjustment
+  \item This is the single most important test for claiming an edge
+\end{enumerate}
+
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 10: Analysis Volume Summary
+% -----------------------------------------------
+\begin{frame}[t]{17 Analysis Scripts Demonstrate Thoroughness}
+
+\scriptsize
+\begin{columns}[T]
+\column{0.48\textwidth}
+
+\textbf{Model Variants Tested:}
+\begin{itemize}\setlength\itemsep{0pt}
+  \item Standard Elo (K=32)
+  \item K-factor sensitivity (24, 32, 48, 64)
+  \item Dual Elo (long/short-term)
+  \item WElo (tournament-weighted K)
+  \item Elo + H2H, Elo + MC ensemble
+\end{itemize}
+
+\textbf{Feature Dimensions Explored:}
+\begin{itemize}\setlength\itemsep{0pt}
+  \item Surface, tournament level, round
+  \item Handedness, height, fatigue
+  \item Season, confidence, odds ranges
+\end{itemize}
+
+\column{0.48\textwidth}
+
+\textbf{Validation:} In-sample, out-of-sample (H2 2024), multi-year (2020--2024)
+
+\vspace{0.3em}
+\textbf{What's documented vs not:}
+
+\begin{tabular}{p{2.5cm}cc}
+\toprule
+Analysis & Done & In docs \\
+\midrule
+K-factor & \checkmark & \checkmark \\
+Calibration & \checkmark & \checkmark \\
+Disagreements & \checkmark & \checkmark \\
+Height/fatigue & \checkmark & \checkmark \\
+\textcolor{negred}{H2 validation} & \checkmark & \textcolor{negred}{\texttimes} \\
+\textcolor{negred}{Dual Elo} & \checkmark & \textcolor{negred}{\texttimes} \\
+\textcolor{negred}{H2H hybrid} & \checkmark & \textcolor{negred}{\texttimes} \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.3em}
+\textit{3 analyses completed but not documented. Results should be reported regardless of sign.}
+
+\end{columns}
+\end{frame}
+
+% -----------------------------------------------
+% SLIDE 11: Final Recommendations
+% -----------------------------------------------
+\begin{frame}[t]{Prioritized Recommendations}
+
+\begin{enumerate}
+
+  \item \textbf{Implement Platt scaling} on calibration curve. Fit on 2021--2023, test on 2024. This is the lowest-hanging fruit in the entire project.
+
+  \item \textbf{Document all out-of-sample results.} The H2 2024 validation scripts exist but results are missing from documentation. Report whether signals held or not.
+
+  \item \textbf{Multi-year validation} of ``agree but less confident'' signal across H1 2021--2024. Report consistency across years.
+
+  \item \textbf{Apply multiple testing correction.} Report total number of subset tests alongside any p-values.
+
+  \item \textbf{Implement scoreline-weighted Elo updates} per Angelini et al. This addresses trajectory lag structurally.
+
+  \item \textbf{Define one prospective betting rule}, freeze parameters, and paper-trade H2 2024 with zero adjustments.
+
+  \item \textbf{Consider Ingram-style upgrade for MC model.} The engine is sound; the parameter estimation is weak.
+
+\end{enumerate}
+
+\end{frame}
+
+\end{document}

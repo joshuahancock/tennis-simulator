@@ -2,7 +2,7 @@
 # Download and process historical betting lines from tennis-data.co.uk
 #
 # Usage:
-#   source("r_analysis/simulator/05_betting_data.R")
+#   source("src/data/betting_data.R")
 #   betting <- load_betting_data()
 #   odds <- get_match_odds("2023-01-15", "Novak Djokovic", "Andrey Rublev", betting)
 

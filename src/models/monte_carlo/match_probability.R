@@ -2,15 +2,15 @@
 # Run Monte Carlo simulations to estimate match win probabilities
 #
 # Usage:
-#   source("r_analysis/simulator/03_match_probability.R")
+#   source("src/models/monte_carlo/match_probability.R")
 #   result <- simulate_match_probability("Novak Djokovic", "Carlos Alcaraz",
 #                                        surface = "Hard", best_of = 3)
 
 library(tidyverse)
 
 # Source required files
-source("r_analysis/simulator/01_mc_engine.R")
-source("r_analysis/simulator/02_player_stats.R")
+source("src/models/monte_carlo/mc_engine.R")
+source("src/data/player_stats.R")
 
 # ============================================================================
 # MATCH PROBABILITY SIMULATION
