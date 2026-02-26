@@ -6,7 +6,7 @@ arXiv:2510.20454v1. https://arxiv.org/html/2510.20454v1
 **Goal:** Reproduce the paper's MagNet GNN results on ATP and WTA data, then extend to
 the betting simulation (intransitive complexity filter, Kelly staking, ROI evaluation).
 
-**Status:** Planning. Full paper read (all sections). Implementation not yet started.
+**Status:** Planning. Sections 1–4.3 of paper read; sections 4.4+ pending.
 
 ---
 
@@ -220,14 +220,11 @@ Known from Section 1:
 - Kelly staking with some fraction
 - 1,903 bets, 3.26% ROI against Pinnacle closing lines
 
-**Resolved (from Sections 6.1–6.3):**
-- **Intransitivity metric:** I*(A_uv) = I(A_uv) · √[Σ_k α(s,s_k)·β_k·φ_k]
-  where the sum is the total accumulated dominance-score weight for the matchup
-- **Threshold:** I* ≥ 2.55 (tuned on validation data Aug 2019 – Nov 2022)
-- **Bets placed:** 1,903 out of 7,705 test matches (24.7% selection rate)
-- **Kelly:** fraction not explicitly stated — standard full-Kelly implied; Sharpe 0.61
-- **Unit staking also profitable:** 1.14% ROI (Kelly 3.26% stronger)
-- **WElo at same filter:** -5.54% (filter alone doesn't explain the edge)
+**Open questions (to be resolved when we read Section 5):**
+- How is "intransitive complexity" operationalized/measured?
+- What Kelly fraction?
+- Is there a minimum edge threshold?
+- How are ties/incomplete matches handled?
 
 ---
 
@@ -238,8 +235,8 @@ Known from Section 1:
 | Player weight data | Unknown | Sackmann may not have weight; may need imputation |
 | Surface transferability α matrix | Not a gap | Tuned via TPE jointly with other hyperparameters |
 | Tournament prestige φ values | Not a gap | Tuned via TPE; range 0.69–0.94 gives search bounds |
-| Intransitive complexity metric | Resolved | I*(A_uv) = I(A_uv)·√[Σ weights]; threshold 2.55 |
-| Betting simulation details | Resolved | 1,903 bets, Kelly 3.26% ROI, p=0.005 |
+| Intransitive complexity metric | Unread | Defined in Section 5 |
+| Betting simulation details | Unread | Defined in Section 5 |
 | Exact validation/test split dates | Specified | Aug 29 2019 / Jan 1 2023 / Jun 8 2025 |
 | PyTorch Geometric MagNetConv API | Not yet checked | May need version-specific implementation |
 
