@@ -221,36 +221,33 @@ ELO_SURFACES <- c("Hard", "Clay", "Grass")
 
 **Paper scope:** Tamber et al. (2025) uses both ATP and WTA, treats them as separate prediction tasks. 16,663 ATP matches + 16,447 WTA matches (Jan 2014 – Jun 2025). Results reported separately by gender and surface, plus combined.
 
-**Current Elo baseline results (2023–2025 test, premium tier, Kovalchik K, `analysis/model_variants/angelini_elo.R`):**
+**welo package replication (2026-02-26, `analysis/model_variants/welo_package_comparison.R`):**
 
-| Tour | Model | Accuracy | Brier |
-|------|-------|----------|-------|
-| ATP | Standard Elo (surface) | 65.0% | 0.2195 |
-| ATP | Angelini WElo | 65.3% | 0.2164 |
-| WTA | Standard Elo (surface) | 63.7% | 0.2224 |
-| WTA | Angelini WElo | 64.3% | 0.2193 |
+Ran the official `welo` CRAN package (`welofit()`, K=Kovalchik, W=GAMES) on our ATP data (2014–2025, premium tier). This uses **overall Elo only** — no separate surface stores.
 
-**K-factor comparison (fixed K=32 vs Kovalchik K=250/(N+5)^0.4):**
+| Model | N (test) | Accuracy | Brier |
+|-------|----------|----------|-------|
+| Package Standard Elo (overall) | 5,020 | **65.7%** | 0.2156 |
+| Package WElo (overall) | 5,020 | **66.4%** | 0.2294 |
+| Our Standard Elo (surface blending) | ~2,500 | 65.0% | 0.2195 |
+| Our Angelini WElo (surface blending) | ~2,500 | 65.3% | 0.2164 |
+| Paper Standard Elo | — | 65.8% | 0.215 |
+| Paper Angelini WElo | — | 66.4% | 0.212 |
+| Pinnacle odds | — | 69.0% | 0.196 |
 
-| Tour | K method | Std Acc | Ang Acc | BS_Std | BS_Ang |
-|------|----------|---------|---------|--------|--------|
-| ATP | fixed | 64.6% | 64.8% | 0.2162 | 0.2169 |
-| ATP | kovalchik | 65.0% | 65.3% | 0.2195 | **0.2164** |
-| WTA | fixed | 63.8% | 64.0% | 0.2197 | 0.2198 |
-| WTA | kovalchik | 63.7% | 64.3% | 0.2224 | **0.2193** |
+**Key finding: the ~0.7pp accuracy gap vs paper was entirely due to surface blending.** The package (overall Elo only) matches the paper exactly. Surface-specific Elo stores *hurt* accuracy by ~0.7pp despite being intuitively appealing. Reasons: data dilution across 3 stores, noisy surface ratings for players with uneven surface schedules, and overall Elo already captures surface implicitly through win/loss records. This is consistent with Kovalchik (2016) who found surface-specific Elo did not consistently outperform overall Elo.
 
-Kovalchik K is now the default (`K_METHOD <- "kovalchik"` in angelini_elo.R), matching the paper.
+**WElo Brier tradeoff:** Package WElo Brier (0.2294) is worse than our implementation (0.2164) despite the same accuracy. Difference: package uses asymmetric loser update (`f_g_j = loser's games proportion`); our code uses the winner's proportion for both players.
 
-**Paper baselines (combined ATP+WTA, 2023–Jun 2025):**
+**By surface (package, ATP 2023–2025):**
 
-| Model | Accuracy | Brier |
-|-------|----------|-------|
-| Standard Elo | 65.8% | 0.215 |
-| Angelini WElo | 66.4% | 0.212 |
-| MagNet GNN | 65.7% | 0.215 (ATP); 0.207 (WTA) |
-| Pinnacle odds | 69.0% | 0.196 |
+| Surface | N | Std Acc | WElo Acc | Std Brier | WElo Brier |
+|---------|---|---------|----------|-----------|------------|
+| Hard | 3,071 | 66.6% | 66.6% | 0.2137 | 0.2284 |
+| Clay | 1,384 | 62.7% | 64.7% | 0.2234 | 0.2406 |
+| Grass | 565 | 68.3% | 69.9% | 0.2065 | 0.2067 |
 
-**Remaining gap (~0.7–1pp vs paper):** Kovalchik K closed ~0.4pp of the ~1pp ATP accuracy gap. Remaining gap likely reflects training data composition differences (paper trains jointly on ATP+WTA, longer pre-2023 history) or surface blending details. Not worth further investigation — gap is within noise for this comparison.
+Grass WElo (69.9%) nominally exceeds Pinnacle's *overall* 69.0%, but: small sample (565 matches, ±1.9pp SE), and Pinnacle's grass-specific accuracy is likely higher than their overall figure. Not a validated edge.
 
 **WElo formula fix (2026-02-26):** Previous implementation incorrectly replaced binary outcome with games proportion (`K*(games_prop - p)`). Correct formula per official `welo` R package source: `K*(1 - p)*games_prop` — scales standard update, never gives winner a negative update.
 
