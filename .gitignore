@@ -52,6 +52,17 @@ data/processed/*
 .env
 .env.local
 
+# LaTeX build artifacts
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 # Model artifacts
 *.pkl
 *.joblib
