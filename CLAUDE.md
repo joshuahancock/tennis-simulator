@@ -35,9 +35,16 @@ Can a point-by-point Monte Carlo simulation model, using serve/return statistics
 
 | Data | Source | Time Period |
 |------|--------|-------------|
-| Match statistics | Jeff Sackmann's tennis_atp repository | 2020-2025 |
-| Betting odds | tennis-data.co.uk | 2024 (H1 for current backtests) |
+| Match statistics | Jeff Sackmann's tennis_atp repository | 2014–2024 (no 2025 file yet as of 2026-02-25) |
+| ATP betting odds | tennis-data.co.uk (`data/raw/tennis_betting/atp/`) | 2014–2026 |
+| WTA betting odds | tennis-data.co.uk (`data/raw/tennis_betting/wta/`) | 2014–2026 |
 | Player features | Tennis charting project | ~303 players with detailed features |
+
+**Tournament tier filter (applied to all training and evaluation):**
+- ATP: `Series` column — `"Grand Slam"`, `"Masters 1000"`, `"Masters Cup"`, `"ATP500"`; 250s excluded
+- WTA: `Tier` column — `"Grand Slam"`, `"WTA1000"`, `"WTA500"`, `"Tour Championships"`, `"Premier"` (pre-2021 only; see note)
+- **WTA tier note:** tennis-data.co.uk uses `"Premier"` for all pre-2021 Premier sub-tiers (Mandatory=1000, 5=500, and lower Premier) under one label. Post-2021 is clean (`WTA1000`/`WTA500`). Evaluate accuracy on 2021+ only.
+- 250-level events (`"International"`, `"WTA250"`) are excluded from both tours
 
 ### Identification Strategy
 
@@ -53,6 +60,10 @@ The model's "edge" comes from:
 
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-02-26 | Added WTA data; both tours now supported | Paper (Tamber et al. 2025) uses ATP + WTA. WTA files use `Tier` not `Series`; handled in loader. Pre-2021 `"Premier"` tier is mixed-level |
+| 2026-02-26 | Fixed Angelini WElo formula bug | Original code replaced binary outcome with games proportion; correct formula scales the standard update by games proportion: `K*(1-p)*f_g` |
+| 2026-02-25 | **Training and evaluation restricted to premium tier only (both tours)** | Aligns with paper (Tamber et al. 2025). 250s excluded — separate roadmap item |
+| 2026-02-25 | Switched to tennis-data.co.uk as primary data source for Elo/MagNet | Paper uses this source (confirmed from arxiv). Covers 2014–2026 for both tours; Sackmann still used for MC (needs serve/return stats) |
 | 2026-02-09 | Fixed critical data leakage via date alignment | ATP data used `tourney_date` (tournament start) while betting used actual match dates, causing same-tournament future results to leak into Elo training |
 | 2026-02-05 | Implemented surface-specific Elo ratings | Literature review recommended Elo as skill backbone; previous backtests showed +9.6pp accuracy vs MC (now invalidated by leakage fix) |
 | 2026-01-24 | Raised MIN_TOTAL_MATCHES from 10 to 20 | Threshold analysis showed ~4pp ROI improvement with minimal accuracy loss |
@@ -128,10 +139,15 @@ tests/              # Unit tests
 
 ## Sample Restrictions
 
-- Matches with valid serve statistics only (`w_svpt > 0`)
-- Players with >= 20 total matches (MIN_TOTAL_MATCHES)
-- Surface-specific stats require >= 20 matches on that surface
+- **Tournament tier: premium only for both tours** (see Data Sources for tier label details)
+  - ATP: Grand Slam, Masters 1000, Masters Cup, ATP500
+  - WTA: Grand Slam, WTA1000, WTA500, Tour Championships, Premier (pre-2021 training only)
+- Matches with valid serve statistics only (`w_svpt > 0`) — MC model only
+- Players with >= 20 total matches (MIN_TOTAL_MATCHES) — MC model only
+- Surface-specific stats require >= 20 matches on that surface — MC model only
 - Betting odds must be available from preferred bookmakers
+
+**Note on 250s:** Excluded from both training and evaluation on both tours. Separate roadmap item.
 
 ---
 
@@ -203,10 +219,34 @@ ELO_SURFACES <- c("Hard", "Clay", "Grass")
 3. Neither model beats the market (~67% accuracy) - no genuine betting edge exists
 4. ROI is negative at all thresholds for both models
 
+**Paper scope:** Tamber et al. (2025) uses both ATP and WTA, treats them as separate prediction tasks. 16,663 ATP matches + 16,447 WTA matches (Jan 2014 – Jun 2025). Results reported separately by gender and surface, plus combined.
+
+**Current Elo baseline results (2023–2025 test, premium tier, `analysis/model_variants/angelini_elo.R`):**
+
+| Tour | Model | Accuracy | Brier |
+|------|-------|----------|-------|
+| ATP | Standard Elo (surface) | 64.6% | 0.2162 |
+| ATP | Angelini WElo | 64.8% | 0.2169 |
+| WTA | Standard Elo (surface) | 63.8% | 0.2197 |
+| WTA | Angelini WElo | 64.0% | 0.2198 |
+
+**Paper baselines (combined ATP+WTA, 2023–Jun 2025):**
+
+| Model | Accuracy | Brier |
+|-------|----------|-------|
+| Standard Elo | 65.8% | 0.215 |
+| Angelini WElo | 66.4% | 0.212 |
+| MagNet GNN | 65.7% | 0.215 (ATP); 0.207 (WTA) |
+| Pinnacle odds | 69.0% | 0.196 |
+
+**Gap vs paper (~1pp):** likely due to fixed K=32 vs paper's Kovalchik dynamic K (`250/(N+5)^0.4`). Investigating this is a next step before MagNet replication.
+
+**WElo formula fix (2026-02-26):** Previous implementation incorrectly replaced binary outcome with games proportion (`K*(games_prop - p)`). Correct formula per official `welo` R package source: `K*(1 - p)*games_prop` — scales standard update, never gives winner a negative update.
+
 **Next priorities:**
-1. Investigate calibration issues (Elo underestimates favorites, overestimates underdogs)
-2. Consider hybrid Elo+MC model
-3. Add recency weighting to Elo
+1. Investigate Kovalchik K-factor to close ~1pp gap vs paper baseline
+2. Implement MagNet GNN replication
+3. Obtain 2025 ATP match data (Sackmann hasn't published yet)
 
 ---
 

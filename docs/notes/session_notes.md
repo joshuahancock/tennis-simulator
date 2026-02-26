@@ -4,7 +4,46 @@ Working notes, findings, and analysis from development sessions.
 
 ---
 
-## 2026-01-23 - Understanding the Similarity Integration
+## 2026-02-25 - Paper Baseline Confirmed; 500+ Only Decision
+
+### Angelini Elo matches paper accuracy exactly
+
+Implemented the true Angelini et al. (2022) weighted Elo formulation in `analysis/model_variants/angelini_elo.R`. Key result: on 2023–2024 premium-tier ATP matches, our numbers match the paper's within rounding:
+
+| Model | Our Acc | Paper Acc |
+|-------|---------|-----------|
+| Standard Elo | 65.5% | 65.7% |
+| Angelini Weighted Elo | 65.8% | 65.8% |
+
+The previous ~5pp gap was entirely explained by dataset filter — we were evaluating on all ATP tiers (including 250s), the paper evaluates on 500+/1000/Slams only.
+
+**Angelini formulation**: uses `games_won / total_games` as the outcome variable instead of binary win/loss. Update rule: `new_rating += K * (games_prop - expected_prob)`. When a dominant favorite barely wins on games (e.g., 7-6, 6-7, 7-5), they can lose rating. This compresses extreme ratings, slightly improving directional accuracy (+0.3pp) but worsening Brier score (0.2274 vs 0.2137) due to less extreme probabilities.
+
+### Decision: ATP 500+ only for training and evaluation
+
+Aligns with the paper. ATP 250s excluded from both training and evaluation going forward. Rationale:
+- Shallower fields, possibly less efficient markets
+- Different dynamics than premium events
+- Predicting 250s is a separate roadmap item (hypothesis: edges easier to find there)
+
+### 2025 data availability
+
+- **Sackmann tennis_atp**: No 2025 file published as of 2026-02-25. Last commit "2024 season." Remote is up-to-date — not just a local sync issue.
+- **tennis-data.co.uk**: `2025.xlsx` already available (~2,600 matches, Dec 2024–Nov 2025). `2026.xlsx` has 112 matches (Jan 2026).
+- Betting data has match scores (W1/L1 etc.) that could support Elo evaluation, but lacks serve/return stats needed for MC model training.
+- Exploring alternative sources for 2025 Sackmann-equivalent match data.
+
+### Roadmap items noted
+
+- 250-series prediction: separate workstream after premium baseline is solid
+- MagNet GNN replication: next major model after Elo baseline confirmed
+- 2025 data: monitor Sackmann; explore alternatives (see separate investigation)
+
+---
+
+## 2026-02-24 - Directory Restructure and Paper Data Alignment
+
+### Directory restructure complete
 
 ### Codebase Overview
 

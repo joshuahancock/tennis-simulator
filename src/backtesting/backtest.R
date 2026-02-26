@@ -220,25 +220,37 @@ backtest_period <- function(start_date, end_date, model = "base",
     betting_data <- extract_best_odds(betting_data)
   }
 
-  # Load historical matches for stats calculation if not provided
+  # Load historical matches for stats / Elo calculation if not provided
   if (is.null(historical_matches)) {
-    cat("Loading historical matches for stats calculation...\n")
+    cat("Loading historical matches...\n")
     if (str_to_upper(tour) == "ATP") {
-      # Try to load pre-computed aligned matches first (fastest)
-      cache_file <- "data/processed/atp_matches_aligned.rds"
-      if (file.exists(cache_file)) {
-        historical_matches <- readRDS(cache_file)
-        cat("  Loaded pre-aligned matches from cache (no leakage)\n")
-      } else if (exists("load_atp_matches_aligned")) {
-        # Fall back to runtime alignment (slower)
-        historical_matches <- load_atp_matches_aligned(
-          year_from = 2015, year_to = year(end_date),
-          betting_data = betting_data, verbose = FALSE
+      if (model == "elo") {
+        # For Elo model: use tennis-data.co.uk (same source as the paper,
+        # covers through 2025, premium-tier only, no date alignment needed)
+        if (!exists("load_tduk_matches")) source("src/data/tennis_data_loader.R")
+        historical_matches <- load_tduk_matches(
+          tour      = str_to_lower(tour),
+          year_from = 2014, year_to = year(end_date),
+          premium_only = TRUE, verbose = FALSE
         )
-        cat("  Using runtime date alignment (fixing tourney_date leakage)\n")
+        cat(sprintf("  Loaded from tennis-data.co.uk [%s] (premium-tier, 2014+)\n",
+                    str_to_upper(tour)))
       } else {
-        historical_matches <- load_atp_matches(year_from = 2015, year_to = year(end_date))
-        warning("Date alignment not available - results may have data leakage")
+        # For MC / other models: use Sackmann data (has serve/return stats)
+        cache_file <- "data/processed/atp_matches_aligned.rds"
+        if (file.exists(cache_file)) {
+          historical_matches <- readRDS(cache_file)
+          cat("  Loaded pre-aligned Sackmann matches from cache\n")
+        } else if (exists("load_atp_matches_aligned")) {
+          historical_matches <- load_atp_matches_aligned(
+            year_from = 2015, year_to = year(end_date),
+            betting_data = betting_data, verbose = FALSE
+          )
+          cat("  Using runtime date alignment (Sackmann)\n")
+        } else {
+          historical_matches <- load_atp_matches(year_from = 2015, year_to = year(end_date))
+          warning("Date alignment not available - results may have data leakage")
+        }
       }
     } else {
       historical_matches <- load_wta_matches(year_from = 2015, year_to = year(end_date))
