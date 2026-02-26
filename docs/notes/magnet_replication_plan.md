@@ -119,9 +119,12 @@ Where:
 - D = 0.5 → no edge
 - Each pair contributes at most one directed edge
 
-**Open question:** Exact α matrix values (9 values: 3×3 surface pairs) and exact φ
-values per tier are not fully specified in the paper — ranges only. Will need to either
-re-optimize via TPE or use reasonable defaults and document the deviation.
+**Note on α and φ values:** The paper reports ranges (α: 0.01–0.45, φ: 0.69–0.94)
+rather than exact values. These are tuned as part of the standard TPE hyperparameter
+optimization (Phase 3d) — not a gap, just part of the search. The diagonal of α is
+fixed at 1.0 (same-surface matches always fully informative); the 3 off-diagonal values
+(hard↔clay, hard↔grass, clay↔grass) are free parameters. If the matrix is asymmetric
+(clay→hard may differ from hard→clay), that's 6 free parameters.
 
 ### 2c. Node features
 
@@ -230,8 +233,8 @@ Known from Section 1:
 | Item | Status | Notes |
 |------|--------|-------|
 | Player weight data | Unknown | Sackmann may not have weight; may need imputation |
-| Surface transferability α matrix | Partially specified | Paper gives range 0.01–0.45; exact values unclear |
-| Tournament prestige φ values | Partially specified | Range 0.69–0.94; exact tier mapping unclear |
+| Surface transferability α matrix | Not a gap | Tuned via TPE jointly with other hyperparameters |
+| Tournament prestige φ values | Not a gap | Tuned via TPE; range 0.69–0.94 gives search bounds |
 | Intransitive complexity metric | Unread | Defined in Section 5 |
 | Betting simulation details | Unread | Defined in Section 5 |
 | Exact validation/test split dates | Specified | Aug 29 2019 / Jan 1 2023 / Jun 8 2025 |
