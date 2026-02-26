@@ -221,14 +221,25 @@ ELO_SURFACES <- c("Hard", "Clay", "Grass")
 
 **Paper scope:** Tamber et al. (2025) uses both ATP and WTA, treats them as separate prediction tasks. 16,663 ATP matches + 16,447 WTA matches (Jan 2014 – Jun 2025). Results reported separately by gender and surface, plus combined.
 
-**Current Elo baseline results (2023–2025 test, premium tier, `analysis/model_variants/angelini_elo.R`):**
+**Current Elo baseline results (2023–2025 test, premium tier, Kovalchik K, `analysis/model_variants/angelini_elo.R`):**
 
 | Tour | Model | Accuracy | Brier |
 |------|-------|----------|-------|
-| ATP | Standard Elo (surface) | 64.6% | 0.2162 |
-| ATP | Angelini WElo | 64.8% | 0.2169 |
-| WTA | Standard Elo (surface) | 63.8% | 0.2197 |
-| WTA | Angelini WElo | 64.0% | 0.2198 |
+| ATP | Standard Elo (surface) | 65.0% | 0.2195 |
+| ATP | Angelini WElo | 65.3% | 0.2164 |
+| WTA | Standard Elo (surface) | 63.7% | 0.2224 |
+| WTA | Angelini WElo | 64.3% | 0.2193 |
+
+**K-factor comparison (fixed K=32 vs Kovalchik K=250/(N+5)^0.4):**
+
+| Tour | K method | Std Acc | Ang Acc | BS_Std | BS_Ang |
+|------|----------|---------|---------|--------|--------|
+| ATP | fixed | 64.6% | 64.8% | 0.2162 | 0.2169 |
+| ATP | kovalchik | 65.0% | 65.3% | 0.2195 | **0.2164** |
+| WTA | fixed | 63.8% | 64.0% | 0.2197 | 0.2198 |
+| WTA | kovalchik | 63.7% | 64.3% | 0.2224 | **0.2193** |
+
+Kovalchik K is now the default (`K_METHOD <- "kovalchik"` in angelini_elo.R), matching the paper.
 
 **Paper baselines (combined ATP+WTA, 2023–Jun 2025):**
 
@@ -239,14 +250,13 @@ ELO_SURFACES <- c("Hard", "Clay", "Grass")
 | MagNet GNN | 65.7% | 0.215 (ATP); 0.207 (WTA) |
 | Pinnacle odds | 69.0% | 0.196 |
 
-**Gap vs paper (~1pp):** likely due to fixed K=32 vs paper's Kovalchik dynamic K (`250/(N+5)^0.4`). Investigating this is a next step before MagNet replication.
+**Remaining gap (~0.7–1pp vs paper):** Kovalchik K closed ~0.4pp of the ~1pp ATP accuracy gap. Remaining gap likely reflects training data composition differences (paper trains jointly on ATP+WTA, longer pre-2023 history) or surface blending details. Not worth further investigation — gap is within noise for this comparison.
 
 **WElo formula fix (2026-02-26):** Previous implementation incorrectly replaced binary outcome with games proportion (`K*(games_prop - p)`). Correct formula per official `welo` R package source: `K*(1 - p)*games_prop` — scales standard update, never gives winner a negative update.
 
 **Next priorities:**
-1. Investigate Kovalchik K-factor to close ~1pp gap vs paper baseline
-2. Implement MagNet GNN replication
-3. Obtain 2025 ATP match data (Sackmann hasn't published yet)
+1. Implement MagNet GNN replication
+2. Obtain 2025 ATP match data (Sackmann hasn't published yet)
 
 ---
 

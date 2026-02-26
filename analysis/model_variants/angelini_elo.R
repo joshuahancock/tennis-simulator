@@ -36,10 +36,11 @@ TOUR        <- "atp"  # "atp" or "wta" — paper treats tours separately
 TRAIN_FROM  <- 2014   # paper uses 2014 start (download older files if needed)
 TEST_TO     <- 2025   # now covers 2025 via tennis-data.co.uk
 DEFAULT_ELO <- 1500
-K_DEFAULT   <- 32
-K_PROV      <- 48
-MIN_PROV    <- 5      # matches before non-provisional
-MIN_SURF    <- 10     # surface matches for full surface weight
+K_METHOD    <- "kovalchik"  # "fixed" or "kovalchik" (paper default)
+K_DEFAULT   <- 32           # used when K_METHOD == "fixed"
+K_PROV      <- 48           # used when K_METHOD == "fixed" (< MIN_PROV matches)
+MIN_PROV    <- 5            # matches before non-provisional (fixed K only)
+MIN_SURF    <- 10           # surface matches for full surface weight
 SURFACES    <- c("Hard", "Clay", "Grass")
 
 # ============================================================================
@@ -48,7 +49,11 @@ SURFACES    <- c("Hard", "Clay", "Grass")
 
 get_e  <- function(e, p) { v <- e[[p]]; if (is.null(v)) DEFAULT_ELO else v }
 get_c  <- function(c, p) { v <- c[[p]]; if (is.null(v)) 0L else v }
-get_k  <- function(c, p) { if (get_c(c, p) < MIN_PROV) K_PROV else K_DEFAULT }
+get_k  <- function(c, p) {
+  n <- get_c(c, p)
+  if (K_METHOD == "kovalchik") 250 / (n + 5)^0.4
+  else if (n < MIN_PROV) K_PROV else K_DEFAULT
+}
 incr_c <- function(c, p) { c[[p]] <- get_c(c, p) + 1L }
 
 elo_prob <- function(ea, eb) 1 / (1 + 10^((eb - ea) / 400))
@@ -63,7 +68,8 @@ blended_elo <- function(ov_e, sf_e, sf_c, player) {
 # DATA LOADING
 # ============================================================================
 
-cat(sprintf("=== Angelini et al. Weighted Elo [%s] ===\n\n", toupper(TOUR)))
+cat(sprintf("=== Angelini et al. Weighted Elo [%s | K=%s] ===\n\n",
+            toupper(TOUR), K_METHOD))
 
 # load_tduk_matches() filters to premium tier by default and returns
 # completed + retired matches (walkovers excluded).
