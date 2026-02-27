@@ -32,6 +32,49 @@ If the intransitivity filter doesn't hold out-of-sample, the paper falls apart.
 prediction terms — came up empty on GNN + pre-match tennis prediction. Novelty claim
 is defensible.
 
+**Literature baseline discussion:**
+
+Two papers are the key foundation for Section 1's framing:
+
+*Van Ours (2025), Empirical Economics:* Football (EPL), 25 seasons, 10 clubs. Establishes
+the mechanism: bookmakers face a trade-off between efficiency (using all information) and
+consistency (setting internally coherent odds). They choose consistency. You cannot set
+A→B, B→C, and C→A odds that are all individually rational without internal inconsistency,
+so bookmakers suppress the cycle and price as if outcomes were transitive. 15 of 120
+possible triads are statistically significant and persistently exploitable. This is the
+*why* behind Clegg & Cartlidge's betting claim.
+
+*Kovalchik (2016), JQAS:* The foundational benchmarking paper. Horse race across 11
+models on 2014 ATP data. Establishes the accuracy ordering the field has measured itself
+against ever since:
+```
+Bookmaker Consensus Model:  72%
+FiveThirtyEight Elo:        70%
+Regression (ranking only):  67–68%
+Point-based:                64–67%
+Bradley-Terry:              62–65%
+```
+No model beats the bookmaker. Within the paper, accuracy by tier:
+- Grand Slams: 70–73% (easiest to predict)
+- Masters 1000: 65–72%
+- 250/500: 60–67% (hardest to predict)
+
+Premium tier matches are *easier* to predict than 250s, consistent with intuition:
+deeper historical data on both players, clearer form signals, and fewer lower-ranked
+players (where all models are 10–20pp worse).
+
+**Reconciliation note on 72% vs. 69%:**
+Kovalchik's 72% BCM (2014, all ATP including 250s) vs. Clegg & Cartlidge's 69%
+Pinnacle (2023–2025, premium only) cannot be cleanly compared:
+- Since premium tier is *easier* to predict than 250s within Kovalchik's study,
+  her 72% is pulled *down* by including 250s. Premium-only in 2014 would have
+  been higher than 72%.
+- A sharper market over a decade would push bookmaker-implied accuracy *up*, not
+  down — so market improvement cannot explain a lower number in 2023–2025 either.
+- The two numbers are from different eras, different player fields, different sample
+  compositions. The 3pp difference is not a meaningful signal and should not be
+  over-interpreted.
+
 ---
 
 ## Section 2: Background
