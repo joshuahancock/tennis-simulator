@@ -266,6 +266,13 @@ Known from Section 1:
 - [ ] Kelly staking simulation
 - [ ] ROI comparison to paper's 3.26%
 
+### Milestone 6: Label smoothing sensitivity (ROI extension)
+- [ ] Retrain with reduced label smoothing (ε = 0.05) and no smoothing (ε = 0)
+- [ ] Compare ROI on intransitive subset: does sharper confidence → larger Kelly bets → better ROI?
+- [ ] Compare global Brier score tradeoff vs. ROI gain
+- [ ] Hypothesis: ε = 0.19 suppresses model confidence exactly in high-signal intransitive matches;
+      lower ε should improve betting ROI at the cost of worse global calibration
+
 ### Milestone 5: WTA extension
 - [ ] Run full pipeline for WTA
 - [ ] Joint evaluation (ATP + WTA combined)

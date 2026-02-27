@@ -282,6 +282,45 @@ overconfidence is penalized automatically and label smoothing is unnecessary.
 ε = 0.19 is higher than the standard default of 0.10 — suggests tennis outcomes
 are uncertain enough that aggressive calibration was beneficial.
 
+**Brier score vs. wagering ROI — a tension in the loss function choice:**
+
+Brier score rewards calibration uniformly across all predictions — a 65% prediction
+should be right 65% of the time, and every match gets equal weight in the loss.
+Label smoothing amplifies this by explicitly capping model confidence (ε = 0.19
+replaces targets with 0.095/0.905, pulling all predictions toward 0.5).
+
+For wagering ROI this is the wrong objective. Kelly staking sizes bets proportionally
+to estimated edge: f ≈ (p_model - p_implied) / (1 - p_implied). Revenue comes almost
+entirely from the subset of matches where the model significantly disagrees with the
+market — the other 80% of matches contribute nothing. A Brier-optimal model
+calibrated equally across all matches is not the same as a model that is *right*
+specifically in high-edge situations.
+
+The ideal betting loss function would weight training examples by market edge
+magnitude — focus the model on getting high-disagreement matches right rather than
+low-disagreement ones. But this requires market odds at training time and creates
+design problems (leakage; also, you're training the model to predict its own
+disagreement with the market).
+
+**The ε = 0.19 problem specifically:** The intransitive matches where structural
+insight should be most confident are exactly the matches where label smoothing is
+suppressing the signal. If a non-transitive triad creates a genuine directional
+conviction, ε = 0.19 actively prevents the model from expressing it. This could
+suppress Kelly bet sizes precisely where the model's structural advantage is
+strongest.
+
+**The paper's implicit solution:** Decouple the objectives. Train globally for
+calibration (Brier + label smoothing), then apply the intransitivity filter at
+inference to select matches where structural signal is strongest. This is reasonable —
+a well-calibrated model produces more trustworthy edge estimates than an overfit one —
+but ε = 0.19 may be overcorrecting in the other direction.
+
+**Extension to explore:** Test with smaller or no label smoothing (ε = 0 or ε ≤
+0.05) and evaluate whether ROI on the intransitive subset improves, even if global
+Brier worsens. The hypothesis: sharper predictions in intransitive matches → larger
+Kelly bet sizes → better ROI on the filtered subset, at the cost of worse global
+calibration. Worth testing after the baseline replication is established.
+
 **Set → match probability conversion (assuming i.i.d. sets):**
 - Best-of-3: P̂₃ = p̂²(3 − 2p̂)
 - Best-of-5: P̂₅ = p̂³(10 − 15p̂ + 6p̂²)
