@@ -169,6 +169,72 @@ D^s(u,v) = Σ_k [α(s,s_k) · β_k · φ_k · g_k(u,v)]
 4. α and φ are tuned as hyperparameters via TPE jointly with architecture parameters.
    Not a replication gap — just part of the optimization.
 
+**Reproducibility analysis:**
+
+*Clearly and precisely defined:*
+- Dominance score formula — mathematical form is unambiguous
+- Time decay functional form: exp(-λ·Δt), λ=0.38
+- Edge direction rule: D > 0.5 → u→v, D < 0.5 → v→u, D = 0.5 → no edge, one edge per pair
+- Number of graphs: 6 (3 surfaces × 2 genders)
+- Node feature list: height, weight, DOB, handedness, surface in-degree, surface out-degree
+- ℓ₂ normalization of node features
+- Missing value imputation: gender-specific medians
+
+*Partially specified — ranges given, exact values require TPE:*
+- α matrix (surface transferability): range 0.01–0.45 for off-diagonal, diagonal fixed at
+  1.0. Paper does not state whether the matrix is symmetric. Does clay→hard equal
+  hard→clay? If symmetric: 3 free parameters. If asymmetric: 6. Not stated.
+- Tournament prestige weights: range 0.69–0.94. Exact tier mapping not pinned down.
+  Grand Slams are the reference level, but how Tour Finals are treated relative to
+  Masters 1000 is recovered only through TPE optimization.
+
+*Genuinely underspecified — requires implementation decisions:*
+- **Concurrent tournaments**: ATP runs multiple tournaments simultaneously. "One snapshot
+  = one tournament round" — but which tournament? Is there one global graph updated after
+  all matches across all concurrent tournaments in a given week, or separate snapshots per
+  tournament? This determines exactly when the graph is rebuilt and what information is
+  available at prediction time.
+- **New players with no H2H history**: Dominance score denominator is zero for pairs that
+  have never met. Paper doesn't address this. Would need a prior or skip the edge
+  entirely — but what prior?
+- **Retired/incomplete matches**: Formula requires winner_games / total_games, which is
+  undefined or misleading for a retirement. Our code uses f_g_i=1, f_g_j=0. Paper
+  doesn't specify.
+- **Edge update timing**: Dominance score is a running weighted average over all historical
+  matches. Recomputed from scratch at each snapshot, or incrementally updated?
+  Equivalent in output but very different in computational cost.
+- **The D = 0.5 boundary**: Practically vanishingly rare with continuous weights, but
+  no epsilon tolerance is stated.
+
+*The single-edge compression — a meaningful design choice:*
+The entire H2H history collapses to one directed edge. Federer beating Nadal once and
+Federer beating Nadal 15 times both produce an edge in the same direction — weight
+differs but sample size information is lost explicitly. Time decay softens this (a
+single old win has a tiny denominator contribution) but trajectory information is gone:
+whether dominance is increasing, decreasing, or reversed over time is not captured.
+
+*The feedback loop — less complex than it sounds:*
+Dynamic node features (in-degree, out-degree) are computed from the graph, which is
+built from the dominance scores. But dominance scores are computed entirely independently
+of the GNN. The GNN is a downstream consumer of the graph, not a modifier. The feedback
+loop is one-directional: graph → features → GNN predictions. No circular dependency
+during training.
+
+*The six graphs are fully isolated at the GNN level:*
+Cross-surface learning happens only at the edge construction stage via α. Once the clay
+graph is built, the GNN operating on it sees only clay-specific edges — no direct
+visibility into hard or grass graphs. The α parameter carries all cross-surface signal.
+This is a significant architectural constraint.
+
+*Overall reproducibility assessment:*
+The GNN training (Phase 3) is the most straightforwardly specified part of the pipeline.
+The graph construction (Phase 2) is where most friction lives. The mathematical form of
+the dominance score is clean, but implementation details — concurrent tournament handling,
+new player priors, retirement handling, exact snapshot timing — involve decisions the
+paper leaves open. Different reasonable choices could produce materially different graphs
+and therefore different model behavior, even with identical architecture and
+hyperparameters. This is the part of the replication to be most cautious about.
+
 ---
 
 ## Section 4.2: MagNet Architecture
