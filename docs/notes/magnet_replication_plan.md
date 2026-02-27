@@ -266,7 +266,17 @@ Known from Section 1:
 - [ ] Kelly staking simulation
 - [ ] ROI comparison to paper's 3.26%
 
-### Milestone 6: Label smoothing sensitivity (ROI extension)
+### Milestone 6: Walk-forward training diagnostics
+- [ ] Track accuracy and Brier by snapshot number across test period (Jan 2023 – Jun 2025)
+      — flat/improving → fine-tuning working; strong improvement → initial sparse training
+      locked in suboptimal weights that quarterly updates don't fully escape
+- [ ] "Fresh retrain at test period start" variant: freeze graph at Jan 2023, train from
+      random initialization for 150 epochs, compare vs. paper's incrementally updated model
+      on identical test matches
+- [ ] If fresh retrain wins materially: walk-forward fine-tuning is a computational
+      convenience, not an accuracy-optimal design
+
+### Milestone 7: Label smoothing sensitivity (ROI extension)
 - [ ] Retrain with reduced label smoothing (ε = 0.05) and no smoothing (ε = 0)
 - [ ] Compare ROI on intransitive subset: does sharper confidence → larger Kelly bets → better ROI?
 - [ ] Compare global Brier score tradeoff vs. ROI gain

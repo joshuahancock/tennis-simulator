@@ -373,6 +373,36 @@ GPU required — CPU-only would be 5–20× slower. Not a cluster job.
 5. The "validation period" starts Aug 2019, not Jan 2014. Five and a half years of
    history are consumed before the first prediction is made.
 
+**Walk-forward design questions:**
+
+*Does 150 epochs on sparse data + quarterly +30 updates converge to the same place
+as training from scratch on a dense graph?* The initial 150 epochs are run on a
+relatively sparse 2014–2019 graph. Subsequent +30 epoch increments are cheap updates
+layered on top of weights initialized from that sparse state. Gradient descent on a
+non-convex loss doesn't guarantee that incremental fine-tuning converges to the same
+solution as a fresh full training run — the initial sparse training could lock in
+inductive biases that quarterly updates never fully escape. The authors presumably
+tested this during hyperparameter optimization, but it warrants independent verification.
+
+*Why ramp up at all rather than starting fully loaded?* Starting predictions in Aug
+2019 rather than, say, Jan 2022 extends the evaluation window (more validation data
+for hyperparameter tuning, larger test set for the betting simulation). The tradeoff
+is that early predictions are made on a sparser graph. Whether early sparse-graph
+predictions are materially worse than later dense-graph predictions is not broken out
+in the paper — if they are, the headline accuracy and Brier figures understate steady-
+state model performance.
+
+*Observable in replication:* Both questions can be answered directly when we have
+the model running:
+1. Track accuracy and Brier by snapshot number across the test period. Flat or
+   gently improving → fine-tuning is working. Strong improvement over time → initial
+   sparse training is a drag that updates don't fully correct.
+2. "Fresh retrain at test period start" variant: freeze graph state as of Jan 2023,
+   train from random initialization for 150 epochs on most recent 15%, compare against
+   the paper's incrementally updated model on the same test matches. If fresh retrain
+   wins, the walk-forward fine-tuning design is more about computational convenience
+   than accuracy.
+
 ---
 
 ## Section 4.4: Parameter Optimization
