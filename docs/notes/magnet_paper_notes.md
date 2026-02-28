@@ -544,4 +544,115 @@ prevented from strong convictions almost everywhere.
 
 ## Section 5: Results and Betting Simulation
 
-*(Notes to be added)*
+### 5a. General Predictive Performance
+
+**Overall results (test period Jan 2023 – Jun 2025, N=8,375 matches):**
+
+| Model | Accuracy | Brier |
+|-------|----------|-------|
+| Standard Elo | 65.7% | 0.215 |
+| Angelini WElo | 66.4% | 0.212 |
+| Bradley-Terry | — | — |
+| MagNet | 65.7% | 0.215 |
+| Pinnacle | 69.0% | 0.196 |
+
+MagNet matches Standard Elo exactly on both metrics. WElo is the best non-bookmaker
+model. No model beats Pinnacle. This is consistent with the framing from Section 1:
+MagNet's contribution is not overall accuracy but structural identification of a
+specific subset of mispriced matches.
+
+**Surface/gender breakdown (Table 4):** Table 4 in the paper gives accuracy and Brier
+by model × surface × gender. The WebFetch extraction was column-misaligned — the numbers
+returned for "MagNet" were actually Pinnacle's column. Read Table 4 directly from the
+paper before implementing evaluation.
+
+**Calibration:** Paper reports strong calibration via calibration curves with recursive
+binning — predicted probabilities closely match observed outcome frequencies. Supports
+downstream use of raw model probabilities for Kelly sizing.
+
+---
+
+### 5b. Betting Simulation
+
+**Intransitive complexity metric:**
+
+The paper adapts Hamilton et al. (2024)'s evidence-weighted intransitivity measure.
+Two components:
+
+Base intransitivity (Hodge decomposition):
+```
+I(A_uv) = [1 + ||A_uv - grad∘div(A_uv)||_F] / [1 + ||grad∘div(A_uv)||_F]
+```
+Hodge decomposition separates a directed graph into its gradient (transitive/rankable)
+component and its curl (cyclic/intransitive) component. The numerator captures how much
+of the adjacency matrix cannot be explained by a transitive ranking; the denominator
+normalizes by the transitive component. I(A_uv) = 1 when perfectly transitive; larger
+when more cyclic structure is present.
+
+Evidence-weighted version:
+```
+I*(A_uv) = I(A_uv) · √(Σ_k α_{s,tk} · β_k · φ_k)
+```
+The square root term is the total evidence weight accumulated for the player pair —
+the same weights used in the dominance score denominator. This prevents high
+intransitivity from sparse/noisy H2H records from driving bet selection.
+High I* requires both genuine cyclic structure AND sufficient match evidence.
+
+The advantage matrix uses logit-transformed dominance scores within common opponent
+neighborhoods — comparing each player's dominance scores against the set of opponents
+they have both faced.
+
+**Bet filtering:**
+- Threshold γ = 2.55 (optimized on validation period)
+- Bet only on matches where I*(A_uv) ≥ γ
+
+**Kelly staking formula:**
+```
+f* = (p̂ · o - 1) / (o - 1)
+```
+where p̂ = model match probability, o = decimal odds. Bankroll reset to 1 before
+each bet (bets treated as independent).
+
+**Results (test period):**
+
+| Strategy | Threshold | Bets | ROI | Sharpe |
+|----------|-----------|------|-----|--------|
+| Kelly staking | γ = 2.55 | 1,903 | **3.26%** | 0.61 |
+| Unit staking | γ = 2.55 | 2,063 | 1.14% | 0.48 |
+
+Kelly outperforms unit staking — the model's confidence is informative, not just its
+direction. 1,903 Kelly bets vs. 2,063 unit bets: Kelly's bankroll-reset rule eliminates
+some matches where the edge is present but the Kelly fraction would be negative (i.e.,
+the model favors the underdog at a price below fair value).
+
+**Key observations:**
+
+1. *Hodge decomposition is well-established.* It's not a novel metric invented for this
+   paper — it's a principled algebraic decomposition of a weighted directed graph into
+   its transitive and cyclic parts. The paper adapts it from Hamilton et al. (2024) for
+   tennis. Straightforward to implement in Python (scipy or networkx).
+
+2. *Evidence weighting is the critical design choice.* Without the √(Σ weights) term,
+   high intransitivity from two or three noisy old matches would trigger bets. The
+   evidence weight ensures the intransitivity is meaningfully supported.
+
+3. *γ = 2.55 is tuned on the validation set.* This is a free parameter. The threshold
+   selection process (how many candidate γ values were tested, whether ROI or Sharpe
+   was the selection criterion) is not stated clearly. This is a potential overfitting
+   surface — with enough threshold values tested, a 3.26% ROI on the test set could
+   partially reflect multiple testing. Worth examining sensitivity of ROI to γ in
+   a ±0.5 band around 2.55.
+
+4. *Bankroll reset to 1 before each bet* is an unusual convention. Standard Kelly
+   analysis compounds the bankroll — each win increases stake size for the next bet.
+   Resetting to 1 makes each bet independent and keeps the simulation tractable, but
+   understates the compounding upside (and downside) of sequential Kelly staking.
+
+5. *Sharpe of 0.61* is modest. For comparison, equity markets target ~0.5 annualized;
+   0.61 over 2.5 years of betting is not exceptional. The ROI figure (3.26%) is more
+   compelling than the Sharpe.
+
+6. *Open question:* The betting simulation appears to use a single combined threshold γ
+   across all surfaces and genders. Whether surface-specific thresholds were considered
+   is not stated — clay's lower α transferability values might produce systematically
+   different intransitivity distributions than hard or grass.
