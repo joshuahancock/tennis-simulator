@@ -219,14 +219,26 @@ D^s(u,v) = Σ_k [α(s,s_k) · β_k · φ_k · g_k(u,v)]
   was never trained with Elo-derived edges) and, where graph signal does exist, would
   bias the GNN toward transitive rankings — undermining the model's core purpose of
   capturing non-transitive structure.
-- **Retired/incomplete matches**: Formula requires winner_games / total_games, which is
-  undefined or misleading for a retirement. Our code uses f_g_i=1, f_g_j=0. Paper
-  doesn't specify.
-- **Edge update timing**: Dominance score is a running weighted average over all historical
-  matches. Recomputed from scratch at each snapshot, or incrementally updated?
-  Equivalent in output but very different in computational cost.
-- **The D = 0.5 boundary**: Practically vanishingly rare with continuous weights, but
-  no epsilon tolerance is stated.
+- **Retired/incomplete matches**: Skip entirely. A retirement doesn't represent a
+  competitive outcome — the scoreline at the point of retirement is arbitrary relative
+  to who would have won. Including with f_g_i=1, f_g_j=0 treats every walkover as a
+  maximally dominant win, inflating the winner's dominance score unfairly.
+
+- **Edge update timing**: Recomputing from scratch at each snapshot is correct but
+  expensive. Efficient incremental approach: store two running sums per (player pair,
+  surface) — numerator N and denominator Z. At each snapshot advance of Δ days, both
+  sums decay uniformly: N ← N·exp(-λ·Δ), Z ← Z·exp(-λ·Δ). When a new match arrives,
+  add the new term with β=1: N ← N + α·φ·g_new, Z ← Z + α·φ. D = N/Z. Store as
+  sparse matrices per surface (players × players × 2 values) — ~17MB for 600 players,
+  trivially manageable. Full history never needs to be retained.
+
+- **The D = 0.5 boundary**: Not a meaningful issue in practice. With continuous inputs
+  (games proportions, exponential decay, continuous prestige weights) the probability
+  of landing exactly on 0.5 is essentially zero. When it does occur, D = 0.5 → no edge
+  means "no dominance asserted" rather than "evenly matched" — the graph treats a pair
+  with a rich but perfectly balanced H2H history identically to two players who have
+  never met, which is a mild semantic oddity. Accepted as a known downside of the
+  design; vanishingly rare in practice.
 
 *The single-edge compression — a meaningful design choice:*
 The entire H2H history collapses to one directed edge. Federer beating Nadal once and
