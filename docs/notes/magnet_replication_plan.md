@@ -187,14 +187,54 @@ MagNet outputs a **set-win probability** p̂(u,v). Convert to match probability:
 
 (Assumes sets are i.i.d. — same independence assumption as standard point-based models)
 
-### 3d. Hyperparameter optimization (if needed)
+### 3d. Hyperparameter optimization
 
-Paper uses TPE (Tree-structured Parzen Estimator) over 300 trials, selecting Pareto-
-optimal solution across men's and women's Brier scores. This is expensive. Strategy:
+TPE is a first-class part of the replication, not a fallback. We will need to re-optimize
+whenever we change the model, extend the data window, or test variants (e.g., label
+smoothing sensitivity, walk-forward design). Set it up properly from the start so it
+can be invoked at will.
 
-1. **First pass:** use their reported optimal values directly
-2. **Only re-optimize if** results diverge meaningfully from paper's reported numbers
-3. If re-optimizing, use Optuna (Python TPE library) — 300 trials × 6 graphs ≈ 1,800 training runs
+**Implementation:**
+- Library: Optuna (Python) with TPE sampler
+- Objective: multi-objective — minimize Brier score for ATP and WTA separately
+- Selection: Pareto-optimal solution with favorable ATP/WTA trade-off
+- Trials: 300 (paper's number; can reduce for quick exploratory runs)
+- Search space (from Table 3):
+  ```python
+  # Architecture
+  K        ∈ {1, 2, 3}
+  layers   ∈ {1, 2, 3}
+  hidden   ∈ {32, 64, 128}
+  use_act  ∈ {True, False}
+  epsilon  ∈ [0.00, 0.20]   # label smoothing
+
+  # Graph construction
+  lambda_  ∈ [0.0, 0.5]    # time decay
+  alpha_hg ∈ [0.0, 0.5]    # surface transferability (6 off-diagonal entries)
+  alpha_hc ∈ [0.0, 0.5]
+  alpha_cg ∈ [0.0, 0.5]
+  alpha_ch ∈ [0.0, 0.5]
+  alpha_gc ∈ [0.0, 0.5]
+  alpha_gh ∈ [0.0, 0.5]
+  phi_1000   ∈ [0.8, 1.0]  # tournament prestige
+  phi_finals ∈ [0.9, 1.1]
+  phi_500    ∈ [0.2, 0.8]
+  ```
+- Validation window: Aug 29, 2019 – Nov 20, 2022 (same as paper)
+
+**Paper's reported optimal values (Table 3) — use as starting point and sanity check:**
+```
+K=2, layers=2, hidden=64, activation=False, ε=0.19
+λ=0.38
+α: h,g=0.37  h,c=0.01  c,g=0.09  c,h=0.07  g,c=0.05  g,h=0.45
+φ: 1000=0.85  Finals=0.94  500=0.69
+```
+
+**When to re-optimize:**
+- Baseline replication (verify we recover values close to paper's)
+- Extended data window (post-Jun 2025 data changes graph density)
+- Label smoothing sensitivity tests (Milestone 7) — fix architecture, re-optimize α/φ/λ
+- Any structural change to graph construction or training procedure
 
 ---
 
