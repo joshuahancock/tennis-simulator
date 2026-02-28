@@ -189,11 +189,24 @@ D^s(u,v) = Σ_k [α(s,s_k) · β_k · φ_k · g_k(u,v)]
   Masters 1000 is recovered only through TPE optimization.
 
 *Genuinely underspecified — requires implementation decisions:*
-- **Concurrent tournaments**: ATP runs multiple tournaments simultaneously. "One snapshot
-  = one tournament round" — but which tournament? Is there one global graph updated after
-  all matches across all concurrent tournaments in a given week, or separate snapshots per
-  tournament? This determines exactly when the graph is rebuilt and what information is
-  available at prediction time.
+- **Concurrent tournaments**: ATP runs multiple tournaments simultaneously, but player
+  pools at the premium tier are functionally disjoint — a player can only enter one
+  tournament per week, so matches from concurrent events don't create leakage into each
+  other's predictions. Proposed approach: use the higher-prestige tournament as the
+  "conductor" that defines snapshot timing; consume completed matches from concurrent
+  lower-prestige tournaments as they finish, even if those rounds are incomplete. The
+  prestige hierarchy (Grand Slam > Masters 1000 > ATP 500) already encoded in φ resolves
+  any ambiguity between two simultaneous premium events.
+
+  Round-level snapshots are a modeling simplification for evaluation tractability, not
+  a validity requirement. Within-round updates are not leakage — using a completed
+  morning match to inform an afternoon prediction is sequentially updating on new
+  evidence, exactly as Elo does match-by-match. The betting window stays open until
+  match start, so mid-round prediction updates are operationally valid. The round-level
+  design is the right choice for reproducible historical backtesting (avoids needing
+  intra-day match timing data and simplifies evaluation), but in live deployment the
+  correct approach is continuous updates: each completed match regenerates predictions
+  for remaining unplayed matches in the round.
 - **New players with no H2H history**: Dominance score denominator is zero for pairs that
   have never met. Paper doesn't address this. Would need a prior or skip the edge
   entirely — but what prior?
