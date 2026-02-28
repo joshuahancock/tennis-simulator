@@ -449,7 +449,80 @@ the model running:
 
 ## Section 4.4: Parameter Optimization
 
-*(Notes to be added)*
+**Method:** TPE (Tree-structured Parzen Estimator) via Optuna. 300 trials over the
+validation period (predictions from Aug 29, 2019 – Nov 20, 2022). Multi-objective:
+minimize Brier score for ATP and WTA *separately*, then select Pareto-optimal solution
+with favorable trade-off between men's and women's performance. This is principled —
+avoids the risk of tuning only on men's and overfitting the α/φ values to ATP dynamics
+that don't generalize to WTA.
+
+**Final architecture (selected from Pareto front):**
+```
+Chebyshev filter order K = 2
+Layers = 2         →  4-hop receptive field (K × L = 2 × 2 = 4)
+Hidden units = 64
+Activation function = None  (linear combination layers only)
+```
+The "no activation function" result is notable — the model reduces to learned linear
+combinations of the magnetic Laplacian-transformed features. Nonlinear activations were
+available and tried (search space included True/False) but didn't help.
+
+**Graph construction parameters (optimized):**
+```
+Time decay rate:  λ = 0.38   (searched over 0.0–0.5)
+```
+
+Tournament prestige bounds by tier:
+```
+Grand Slams:        φ = 1.0  (normalized reference)
+Masters/WTA 1000:   φ ∈ [0.8, 1.0]
+WTA/ATP 500:        φ ∈ [0.2, 0.8]
+Tour Finals:        φ ∈ [0.9, 1.1]
+```
+The Tour Finals bound [0.9, 1.1] is worth noting — it *can exceed* Grand Slams
+(normalized to 1.0). This makes sense: year-end finals feature only the top 8 players,
+often producing the most competitive and information-dense matches on the tour.
+
+Surface transferability α values (cross-surface < same-surface, diagonal fixed at 1.0):
+Exact values recovered only via TPE; paper gives ranges 0.01–0.45 for off-diagonal.
+
+**Training parameters (optimized):**
+```
+Label smoothing: ε = 0.19  (searched over 0.00–0.20)
+```
+Optimal ε = 0.19 is at the near-boundary of the search range (max was 0.20). This
+suggests the TPE pushed aggressively toward the upper limit — if the bound had been
+wider, it might have selected higher. Possible interpretation: outcomes in competitive
+premium-tier matches are genuinely very uncertain, and the model benefits from being
+prevented from strong convictions almost everywhere.
+
+**Key observations:**
+
+1. *No activation function* reduces MagNet to a linear spectral filter over the magnetic
+   Laplacian. The expressive power comes entirely from the complex-valued graph structure
+   (directional phase encoding), not from nonlinear feature transformations. This is a
+   clean, interpretable architectural choice.
+
+2. *ε near the search boundary* raises the question of whether the search range was
+   constraining the optimal. Practically: for replication, use 0.19. For extensions
+   (Milestone 7), the label smoothing sensitivity test should include ε = 0.25 as well
+   as 0.05 and 0.00 to understand the full curve.
+
+3. *Tour Finals weighting* (φ up to 1.1) is an interesting departure from the intuitive
+   prestige ordering (Grand Slam > everything else). Suggests match outcomes in elite
+   small fields are more signal-dense than match outcomes in the broader 128-player Slam
+   draw — plausible given that Slam early rounds include many mismatches, while Tour
+   Finals matches are always competitive.
+
+4. *Pareto selection from multi-objective optimization* means ATP and WTA hyperparameters
+   are jointly constrained. A single α matrix and single φ schedule applies to both tours'
+   six graphs. This is a strong assumption — optimal surface transferability for ATP may
+   differ from WTA — but it halves the parameter count and reduces overfitting risk.
+
+5. *Replication gap:* The exact α matrix values are not stated. We recover them by running
+   the same TPE search (300 trials, same validation period). Using the paper's reported
+   architecture values (K=2, L=2, hidden=64, ε=0.19) as fixed, the only remaining
+   search is over λ, α, and φ — considerably smaller than the full joint search.
 
 ---
 
