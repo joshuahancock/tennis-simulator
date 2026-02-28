@@ -208,8 +208,17 @@ D^s(u,v) = Σ_k [α(s,s_k) · β_k · φ_k · g_k(u,v)]
   correct approach is continuous updates: each completed match regenerates predictions
   for remaining unplayed matches in the round.
 - **New players with no H2H history**: Dominance score denominator is zero for pairs that
-  have never met. Paper doesn't address this. Would need a prior or skip the edge
-  entirely — but what prior?
+  have never met. The natural resolution is no edge (D = 0.5 → no edge is already in
+  the edge direction rule). This is the principled choice: the GNN's 4-hop receptive
+  field was specifically designed to handle pairs with no direct H2H by propagating
+  information through common opponents. If there is no signal within 4 hops, 50/50 is
+  the most honest position — the graph has nothing to say. For truly isolated new
+  players with sparse connections, predictions degrade gracefully to node features
+  (height, weight, age, handedness), which is the best available prior. Constructing
+  a synthetic edge from Elo would create a training/inference inconsistency (model
+  was never trained with Elo-derived edges) and, where graph signal does exist, would
+  bias the GNN toward transitive rankings — undermining the model's core purpose of
+  capturing non-transitive structure.
 - **Retired/incomplete matches**: Formula requires winner_games / total_games, which is
   undefined or misleading for a retirement. Our code uses f_g_i=1, f_g_j=0. Paper
   doesn't specify.
