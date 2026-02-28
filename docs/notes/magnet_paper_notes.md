@@ -472,19 +472,32 @@ available and tried (search space included True/False) but didn't help.
 Time decay rate:  λ = 0.38   (searched over 0.0–0.5)
 ```
 
-Tournament prestige bounds by tier:
+Tournament prestige optimal values (from Table 3):
 ```
 Grand Slams:        φ = 1.0  (normalized reference)
-Masters/WTA 1000:   φ ∈ [0.8, 1.0]
-WTA/ATP 500:        φ ∈ [0.2, 0.8]
-Tour Finals:        φ ∈ [0.9, 1.1]
+Tour Finals:        φ = 0.94 (search bound [0.9, 1.1]; optimal stayed below Grand Slams)
+Masters/WTA 1000:   φ = 0.85 (search bound [0.8, 1.0])
+ATP/WTA 500:        φ = 0.69 (search bound [0.2, 0.8])
 ```
-The Tour Finals bound [0.9, 1.1] is worth noting — it *can exceed* Grand Slams
-(normalized to 1.0). This makes sense: year-end finals feature only the top 8 players,
-often producing the most competitive and information-dense matches on the tour.
+The Tour Finals search bound of [0.9, 1.1] allowed it to exceed Grand Slams, but the
+optimal value (0.94) did not. Grand Slams remain the highest-prestige tier.
 
-Surface transferability α values (cross-surface < same-surface, diagonal fixed at 1.0):
-Exact values recovered only via TPE; paper gives ranges 0.01–0.45 for off-diagonal.
+Surface transferability α matrix (from Table 3, fully asymmetric):
+```
+αh,g = 0.37   (grass matches → hard graph)
+αh,c = 0.01   (clay matches → hard graph)
+αc,g = 0.09   (grass matches → clay graph)
+αc,h = 0.07   (hard matches → clay graph)
+αg,c = 0.05   (clay matches → grass graph)
+αg,h = 0.45   (hard matches → grass graph)
+```
+The matrix is confirmed asymmetric (αh,g ≠ αg,h). The pattern is striking: hard and
+grass transfer strongly to each other in both directions (0.37 and 0.45). Clay is
+almost informationally isolated — clay matches barely inform the hard graph (0.01) or
+grass graph (0.05), and cross-surface transfers into clay are also low (0.07 from hard,
+0.09 from grass). This is consistent with clay being a fundamentally different surface
+(slower, higher bounce, different player archetypes) where cross-surface form is a
+weak signal.
 
 **Training parameters (optimized):**
 ```
@@ -508,21 +521,24 @@ prevented from strong convictions almost everywhere.
    (Milestone 7), the label smoothing sensitivity test should include ε = 0.25 as well
    as 0.05 and 0.00 to understand the full curve.
 
-3. *Tour Finals weighting* (φ up to 1.1) is an interesting departure from the intuitive
-   prestige ordering (Grand Slam > everything else). Suggests match outcomes in elite
-   small fields are more signal-dense than match outcomes in the broader 128-player Slam
-   draw — plausible given that Slam early rounds include many mismatches, while Tour
-   Finals matches are always competitive.
+3. *Tour Finals weighting:* The search bound [0.9, 1.1] allowed Tour Finals to exceed
+   Grand Slams, but the optimal (0.94) did not go there. Prestige ordering in the
+   optimal solution: Grand Slams (1.0) > Tour Finals (0.94) > Masters/WTA1000 (0.85) >
+   ATP/WTA500 (0.69). Intuitive and consistent with field size and competitive depth.
 
-4. *Pareto selection from multi-objective optimization* means ATP and WTA hyperparameters
+4. *Clay isolation is the most interpretable finding in the α matrix.* αh,c = 0.01
+   means clay matches are nearly worthless for constructing the hard-court graph — the
+   TPE found that cross-surface transfer from clay is essentially noise. Hard ↔ grass
+   transfer (0.37 and 0.45) is much stronger, consistent with both being fast surfaces
+   where serve-heavy play dominates.
+
+5. *Pareto selection from multi-objective optimization* means ATP and WTA hyperparameters
    are jointly constrained. A single α matrix and single φ schedule applies to both tours'
    six graphs. This is a strong assumption — optimal surface transferability for ATP may
    differ from WTA — but it halves the parameter count and reduces overfitting risk.
 
-5. *Replication gap:* The exact α matrix values are not stated. We recover them by running
-   the same TPE search (300 trials, same validation period). Using the paper's reported
-   architecture values (K=2, L=2, hidden=64, ε=0.19) as fixed, the only remaining
-   search is over λ, α, and φ — considerably smaller than the full joint search.
+6. *No replication gap on α or φ:* All values are stated in Table 3. The full
+   parameter set is recoverable directly from the paper without running TPE.
 
 ---
 
