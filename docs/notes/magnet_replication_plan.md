@@ -323,6 +323,24 @@ Known from Section 1:
 - [ ] Hypothesis: ε = 0.19 suppresses model confidence exactly in high-signal intransitive matches;
       lower ε should improve betting ROI at the cost of worse global calibration
 
+### Milestone 8: Tighter intransitivity filter (bet volume reduction)
+The paper's γ = 2.55 threshold produces ~1,903 bets over 2.5 years (~760/year, ~15/week).
+This volume is not operationally sustainable — placing 15 bets per week requires access
+to a sharp book that accepts tennis action, which is geographically restricted in many
+US states. The goal here is to find a tighter threshold that preserves or improves ROI
+while reducing bet volume to something actionable (target: ≤2–3 bets/week, ~100–150/year).
+
+- [ ] Plot ROI and bet count as a function of γ across a range (e.g., γ ∈ [2.0, 5.0])
+      using the test period — identify the ROI/volume trade-off curve
+- [ ] Identify a "high conviction" threshold where ROI is meaningfully higher even if
+      total profit in absolute terms is lower
+- [ ] Check whether the tighter filter skews toward particular surfaces, genders, or
+      tournament tiers — a filter that concentrates on one surface may be overfitting
+- [ ] Re-run γ optimization on validation set with bet volume as an explicit constraint
+      (e.g., maximize ROI subject to ≤ N bets/year)
+- [ ] Note: tightening γ post-hoc on the test set is data snooping; the volume-constrained
+      optimization must be done on validation only
+
 ### Milestone 5: WTA extension
 - [ ] Run full pipeline for WTA
 - [ ] Joint evaluation (ATP + WTA combined)
