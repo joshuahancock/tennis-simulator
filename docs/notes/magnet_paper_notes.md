@@ -385,6 +385,14 @@ not just raw head-to-head records.
 
 One snapshot = one tournament round. 38 snapshots ≈ one quarter.
 
+**Parsing "38 snapshots ≈ quarter year":** The operative unit is tournament rounds, not
+calendar time. At the premium tier, approximately 150 rounds occur per calendar year
+(~12–15 premium events × 7 rounds each, for both ATP and WTA combined per surface
+graph). 150 ÷ 4 ≈ 38 rounds per quarter. The "quarter year" label is a consequence of
+counting rounds, not a trigger — they don't retrain at the start of each calendar quarter
+or at each Grand Slam. The Grand Slam interpretation fails: four Slams per year × 7 rounds
+each = 28 rounds, not 38, and they are unevenly spaced across the year.
+
 **Data splits:**
 | Period | Purpose | Dates |
 |--------|---------|-------|
