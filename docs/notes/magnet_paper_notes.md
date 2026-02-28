@@ -561,10 +561,29 @@ model. No model beats Pinnacle. This is consistent with the framing from Section
 MagNet's contribution is not overall accuracy but structural identification of a
 specific subset of mispriced matches.
 
-**Surface/gender breakdown (Table 4):** Table 4 in the paper gives accuracy and Brier
-by model × surface × gender. The WebFetch extraction was column-misaligned — the numbers
-returned for "MagNet" were actually Pinnacle's column. Read Table 4 directly from the
-paper before implementing evaluation.
+**Surface/gender breakdown (Table 4):** Columns are Model (MagNet), Elo, WElo, BT, PS.
+Underlined values = best non-PS performance per row.
+
+| Gender | Surface | N | MagNet Acc | MagNet Brier | Elo Acc | Elo Brier | WElo Acc | WElo Brier | BT Acc | BT Brier | PS Acc | PS Brier |
+|--------|---------|---|-----------|-------------|---------|-----------|----------|------------|--------|----------|--------|----------|
+| Men | Clay | 1375 | 0.651 | 0.218 | 0.636 | 0.223 | 0.644 | 0.219 | 0.633 | 0.217 | 0.703 | 0.193 |
+| Men | Grass | 374 | 0.674 | **0.195** | 0.693 | 0.201 | **0.709** | 0.197 | 0.655 | 0.207 | 0.722 | 0.176 |
+| Men | Hard | 2401 | 0.658 | 0.213 | 0.663 | 0.214 | **0.669** | **0.212** | 0.653 | 0.217 | 0.688 | 0.197 |
+| Women | Clay | 1218 | 0.662 | 0.217 | 0.671 | 0.212 | **0.672** | **0.210** | 0.656 | 0.215 | 0.702 | 0.193 |
+| Women | Grass | 356 | 0.666 | 0.208 | 0.691 | 0.203 | **0.697** | **0.200** | 0.697 | 0.211 | 0.691 | 0.193 |
+| Women | Hard | 2651 | 0.652 | 0.217 | 0.650 | 0.216 | **0.657** | **0.213** | 0.641 | 0.220 | 0.674 | 0.201 |
+| Both | All | 8375 | 0.657 | 0.215 | 0.658 | 0.215 | **0.664** | **0.212** | 0.648 | 0.217 | 0.690 | 0.196 |
+
+Key observations from Table 4:
+- MagNet is not the best non-PS model on any accuracy cell — WElo wins on most.
+  MagNet's only best-non-PS result is Brier on men's grass (0.195 vs. WElo's 0.197).
+- MagNet is weakest on men's clay accuracy (65.1%) — notable given clay is the most
+  intransitivity-rich surface where the graph model might be expected to have an edge.
+- WElo is the consistently dominant non-PS model: best or tied-best on 5 of 6
+  surface/gender accuracy cells and 5 of 6 Brier cells.
+- BT is weakest overall (64.8%).
+- Women's grass is the only cell where PS (69.1%) doesn't clearly dominate accuracy —
+  WElo (69.7%) matches or beats it, though PS still wins Brier (0.193 vs. 0.200).
 
 **Calibration:** Paper reports strong calibration via calibration curves with recursive
 binning — predicted probabilities closely match observed outcome frequencies. Supports
@@ -656,3 +675,22 @@ the model favors the underdog at a price below fair value).
    across all surfaces and genders. Whether surface-specific thresholds were considered
    is not stated — clay's lower α transferability values might produce systematically
    different intransitivity distributions than hard or grass.
+
+7. *3.26% ROI is meaningful but thin.* Against Pinnacle (~2% margin), beating the
+   closing line by 3.26% on the filtered subset implies ~5% edge above fair value —
+   real signal against the sharpest book in the world. Professional sports bettors
+   typically target 3–7% ROI, so 3.26% is at the low end of that range, not trivially
+   weak. However, the confidence interval is wide (Sharpe 0.61 over 2.5 years), the
+   true edge could plausibly be anywhere from ~0% to ~6%, and the γ overfitting concern
+   is real. Unit staking at 1.14% is genuinely weak — most of the headline number
+   depends on Kelly sizing being correct.
+
+8. *Bet volume is operationally unsustainable at γ = 2.55.* ~1,903 bets over 2.5
+   years = ~760/year = ~15/week. Placing 15 tennis bets per week requires reliable
+   access to a sharp book accepting tennis action, which is geographically restricted
+   in many US jurisdictions. A tighter threshold trades volume for conviction — the
+   ROI/volume tradeoff curve (Milestone 8) is the key diagnostic. The right target is
+   ≤2–3 high-conviction bets per week (~100–150/year). Key constraints: (a) threshold
+   must be selected on validation only — choosing γ by inspecting the test-period ROI
+   curve is data snooping; (b) a tighter filter that concentrates on one surface or
+   tier may reflect overfitting rather than genuine signal and should be checked.
