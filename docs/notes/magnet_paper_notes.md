@@ -591,6 +591,39 @@ downstream use of raw model probabilities for Kelly sizing.
 
 ---
 
+### 5.1: Model Calibration
+
+**Method:** Calibration curves using Tukey (1961) recursive binning, adapted from
+Boshnakov et al. (2017). Standard bins plus two additional mid-range bins
+([0.375, 0.5) and [0.5, 0.625)) for finer resolution in the competitive range where
+tennis predictions cluster. Two curves shown in Figure 4: one for men, one for women.
+
+**Result:** "The model demonstrates strong calibration, with predicted probabilities
+closely matching observed frequencies." Assessment is purely visual — no numerical
+calibration metric (e.g., ECE, Brier decomposition) is reported.
+
+**Key observations:**
+
+1. *Calibration assessed for MagNet only.* No calibration curves for Elo, WElo, BT,
+   or Pinnacle. We don't know whether MagNet is better or worse calibrated than WElo,
+   which would be a meaningful comparison given WElo has a better overall Brier score.
+
+2. *Purely visual is weak evidence.* "Closely matching" on a visual plot is a low bar.
+   The real question for Kelly sizing is whether miscalibration in the intransitive
+   subset (where bets are placed) is systematic — a globally well-calibrated model
+   can still be locally miscalibrated in the specific region that matters.
+
+3. *Purpose of this section is to justify Kelly sizing.* If MagNet probabilities are
+   miscalibrated, Kelly fractions (f* = (p̂·o − 1)/(o − 1)) are wrong, and the 3.26%
+   ROI figure is partly an artifact of staking errors rather than genuine edge.
+
+4. *For replication:* compute ECE (Expected Calibration Error) and plot calibration
+   curves with confidence intervals for all models, not just MagNet. Also compute
+   calibration separately for the intransitive subset (I* ≥ 2.55) — this is the
+   population that actually matters for the betting result.
+
+---
+
 ### 5b. Betting Simulation
 
 **Intransitive complexity metric:**
