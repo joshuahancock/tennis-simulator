@@ -542,86 +542,6 @@ prevented from strong convictions almost everywhere.
 
 ---
 
-## Section 6.0: Intransitivity and Market Efficiency (introduction)
-
-**Opening framing:** The arXiv paper acknowledges the MathSport paper achieved significant
-betting profits with an unoptimized configuration, but did not investigate *why*. Section 6
-investigates whether MagNet's advantage stems specifically from handling intransitive
-relationships — which traditional scalar rating systems (Elo, Bradley-Terry) cannot capture.
-
-**Summary of the MathSport paper:**
-
-*Data:* ATP only (no WTA). Grand Slams + Masters 1000 + 2 ATP 500s (Queen's Club and
-Halle Open added specifically for grass coverage). Jan 2016 – Sep 2024. 7,110 matches,
-426 players. Test set: 1,074 matches (Oct 2023 – Sep 2024).
-
-*Key methodological differences from the arXiv paper:*
-
-| | MathSport paper | arXiv paper |
-|--|----------------|-------------|
-| Surface transferability | None — graphs fully isolated | α matrix (0.01–0.45) |
-| Tournament prestige | None — all matches equal weight | φ by tier (0.69–0.94) |
-| Time decay | λ ≈ 0 (1-year-old match = 99% weight) | λ = 0.38 |
-| Architecture | K=1, 1 layer, 32 hidden | K=2, 2 layers, 64 hidden |
-| Training cadence | 75 epochs + early stopping, every snapshot | 150 epochs + 30 epochs quarterly |
-| Label smoothing | None | ε = 0.19 |
-| Data split | 65/15/10/10 | 85/15 walk-forward |
-| Direction averaging | Yes — averages (u→v) and (v→u) predictions | Not mentioned |
-| Betting filter | Favourites only (p̂ > 0.5), Kelly | Intransitivity I* ≥ 2.55, Kelly |
-| WTA | No | Yes |
-
-*Results (MathSport paper, Table 1):*
-
-| Surface | N | MagNet Acc | MagNet Brier | MagNet ROI | WElo ROI | PS Acc |
-|---------|---|-----------|-------------|-----------|---------|--------|
-| Clay | 314 | 67.5% | 0.216 | 0.24% | −20.21% | 73.6% |
-| Grass | 169 | 71.0% | 0.209 | 11.60% | −5.68% | 74.6% |
-| Hard | 591 | 63.8% | 0.221 | 10.87% | −2.14% | 69.9% |
-| **All** | **1,074** | **66.0%** | **0.218** | **7.66%** | **−9.24%** | **71.7%** |
-
-Significance test: pbs = 0.012 (probability random wagering matches or exceeds observed
-ROI, from 100,000 simulated trials of 1,074 random bets).
-
-*Live test (2025 clay season — Monte Carlo, Madrid, Rome Masters):*
-
-| Model | Accuracy | Brier | ROI |
-|-------|----------|-------|-----|
-| MagNet | 63.3% | 0.233 | 3.6% |
-| WElo | 63.7% | 0.222 | 2.2% |
-| Pinnacle | 67.2% | 0.211 | — |
-
-**Key observations:**
-
-1. *The "optimized" arXiv paper has lower ROI (3.26%) than the unoptimized MathSport
-   paper (7.66%).* The optimization improved Brier calibration but not betting ROI.
-   Different betting filters (favourite-Kelly vs. intransitivity filter), different test
-   periods, and different bet volumes (1,074 vs. 1,903) make direct comparison imperfect,
-   but the headline is notable — structural improvement to the model did not translate
-   to better betting returns.
-
-2. *Clay ROI was essentially zero (0.24%) in the MathSport paper,* consistent with
-   clay having the lowest I* in the arXiv paper. Stable hierarchies on clay → less
-   bookmaker mispricing → less exploitable edge.
-
-3. *Direction averaging (MathSport paper Eq. 4):* p̂_uv = (ẑ_uv + (1 − ẑ_vu)) / 2.
-   This averages predictions from both directed perspectives to reduce player-ordering
-   sensitivity. The arXiv paper does not mention this. Unknown whether it was retained
-   or dropped — worth checking during implementation.
-
-4. *WElo ROI is −9.24%* in the MathSport paper — substantially negative. Reinforces
-   that WElo's calibration issues, while better on Brier in some comparisons, translate
-   badly to variable-stake betting strategies.
-
-5. *The live test provides out-of-sample evidence* the MathSport result was not pure
-   overfitting — 3.6% ROI over three clay Masters events in 2025. Small sample but the
-   direction holds.
-
-6. *The arXiv paper's test set is 8× larger* (8,375 vs. 1,074 matches) — a more
-   reliable estimate of true steady-state performance, but also a much harder bar to
-   clear in absolute ROI terms.
-
----
-
 ## Section 5: Results and Betting Simulation
 
 ### 5a. General Predictive Performance
@@ -815,3 +735,203 @@ the model favors the underdog at a price below fair value).
    must be selected on validation only — choosing γ by inspecting the test-period ROI
    curve is data snooping; (b) a tighter filter that concentrates on one surface or
    tier may reflect overfitting rather than genuine signal and should be checked.
+
+---
+
+## Section 6.0: Intransitivity and Market Efficiency (introduction)
+
+**Opening framing:** The arXiv paper acknowledges the MathSport paper achieved significant
+betting profits with an unoptimized configuration, but did not investigate *why*. Section 6
+investigates whether MagNet's advantage stems specifically from handling intransitive
+relationships — which traditional scalar rating systems (Elo, Bradley-Terry) cannot capture.
+
+**Summary of the MathSport paper:**
+
+*Data:* ATP only (no WTA). Grand Slams + Masters 1000 + 2 ATP 500s (Queen's Club and
+Halle Open added specifically for grass coverage). Jan 2016 – Sep 2024. 7,110 matches,
+426 players. Test set: 1,074 matches (Oct 2023 – Sep 2024).
+
+*Key methodological differences from the arXiv paper:*
+
+| | MathSport paper | arXiv paper |
+|--|----------------|-------------|
+| Surface transferability | None — graphs fully isolated | α matrix (0.01–0.45) |
+| Tournament prestige | None — all matches equal weight | φ by tier (0.69–0.94) |
+| Time decay | λ ≈ 0 (1-year-old match = 99% weight) | λ = 0.38 |
+| Architecture | K=1, 1 layer, 32 hidden | K=2, 2 layers, 64 hidden |
+| Training cadence | 75 epochs + early stopping, every snapshot | 150 epochs + 30 epochs quarterly |
+| Label smoothing | None | ε = 0.19 |
+| Data split | 65/15/10/10 | 85/15 walk-forward |
+| Direction averaging | Yes — averages (u→v) and (v→u) predictions | Not mentioned |
+| Betting filter | Favourites only (p̂ > 0.5), Kelly | Intransitivity I* ≥ 2.55, Kelly |
+| WTA | No | Yes |
+
+*Results (MathSport paper, Table 1):*
+
+| Surface | N | MagNet Acc | MagNet Brier | MagNet ROI | WElo ROI | PS Acc |
+|---------|---|-----------|-------------|-----------|---------|--------|
+| Clay | 314 | 67.5% | 0.216 | 0.24% | −20.21% | 73.6% |
+| Grass | 169 | 71.0% | 0.209 | 11.60% | −5.68% | 74.6% |
+| Hard | 591 | 63.8% | 0.221 | 10.87% | −2.14% | 69.9% |
+| **All** | **1,074** | **66.0%** | **0.218** | **7.66%** | **−9.24%** | **71.7%** |
+
+Significance test: pbs = 0.012 (probability random wagering matches or exceeds observed
+ROI, from 100,000 simulated trials of 1,074 random bets).
+
+*Live test (2025 clay season — Monte Carlo, Madrid, Rome Masters):*
+
+| Model | Accuracy | Brier | ROI |
+|-------|----------|-------|-----|
+| MagNet | 63.3% | 0.233 | 3.6% |
+| WElo | 63.7% | 0.222 | 2.2% |
+| Pinnacle | 67.2% | 0.211 | — |
+
+**Key observations:**
+
+1. *The "optimized" arXiv paper has lower ROI (3.26%) than the unoptimized MathSport
+   paper (7.66%).* The optimization improved Brier calibration but not betting ROI.
+   Different betting filters (favourite-Kelly vs. intransitivity filter), different test
+   periods, and different bet volumes (1,074 vs. 1,903) make direct comparison imperfect,
+   but the headline is notable — structural improvement to the model did not translate
+   to better betting returns.
+
+2. *Clay ROI was essentially zero (0.24%) in the MathSport paper,* consistent with
+   clay having the lowest I* in the arXiv paper. Stable hierarchies on clay → less
+   bookmaker mispricing → less exploitable edge.
+
+3. *Direction averaging (MathSport paper Eq. 4):* p̂_uv = (ẑ_uv + (1 − ẑ_vu)) / 2.
+   This averages predictions from both directed perspectives to reduce player-ordering
+   sensitivity. The arXiv paper does not mention this. Unknown whether it was retained
+   or dropped — worth checking during implementation.
+
+4. *WElo ROI is −9.24%* in the MathSport paper — substantially negative. Reinforces
+   that WElo's calibration issues, while better on Brier in some comparisons, translate
+   badly to variable-stake betting strategies.
+
+5. *The live test provides out-of-sample evidence* the MathSport result was not pure
+   overfitting — 3.6% ROI over three clay Masters events in 2025. Small sample but the
+   direction holds.
+
+6. *The arXiv paper's test set is 8× larger* (8,375 vs. 1,074 matches) — a more
+   reliable estimate of true steady-state performance, but also a much harder bar to
+   clear in absolute ROI terms.
+
+---
+
+## Section 6.1: Quantifying Intransitivity
+
+**The metric — four equations:**
+
+*Step 1: Identify common opponents* for the match (u, v) at snapshot i:
+```
+C_uv = { c ∈ V : (u,c) ∈ E^s_i  and  (v,c) ∈ E^s_i }
+```
+Only players who have faced both u and v on surface s are included.
+
+*Step 2: Construct the advantage matrix* over the (|C_uv| + 2) × (|C_uv| + 2) subgraph:
+```
+A_uv[i,j] = log( w_ij / (1 - w_ij) )
+```
+Logit transform maps dominance scores [0,1] → (−∞, +∞). Ensures antisymmetry required
+for Hodge decomposition. A score of 0.5 (balanced H2H) maps to 0; strong dominance maps
+to large positive values.
+
+*Step 3: Hodge decomposition* separates A_uv into gradient (transitive) and curl (cyclic):
+```
+I(A_uv) = [1 + ||A_uv − grad∘div(A_uv)||_F] / [1 + ||grad∘div(A_uv)||_F]
+```
+Numerator = cyclic component + 1. Denominator = transitive component + 1. I = 1 when
+perfectly transitive; grows larger as cyclic structure increases. The +1 prevents
+division by zero when the graph is fully transitive.
+
+*Step 4: Evidence weighting* — scale by accumulated match evidence for the pair:
+```
+I*(A_uv) = I(A_uv) · √( Σ_k α_{s,tk} · β_k · φ_k )
+```
+The square root term is the same sum of weights as the dominance score denominator —
+effectively the "evidence budget" accumulated for pair (u,v). This prevents high
+intransitivity from sparse or noisy records from dominating bet selection. A match
+with one unreliable old meeting can have high I(A_uv) but low I*(A_uv).
+
+**Intransitivity distributions (Figure 6 — ridgeline plots):**
+
+Hard court (bimodal, both genders):
+- Two distinct peaks: first around I*≈1.5, second around I*≈3.0–3.5
+- γ = 2.55 sits in the trough between the two modes — a principled threshold that
+  separates the "stable hierarchy" population (left mode) from the "genuinely
+  contested/cyclical" population (right mode)
+- Women's distribution (orange) is shifted right vs. men's — higher second mode,
+  more mass at I* > 4
+- Long right tail extending to I*≈10 — very high intransitivity matchups exist
+
+Clay court (bimodal, first mode dominates):
+- First peak around I*≈0.5–1.0 is large; second peak around I*≈2.0–2.5 is much
+  smaller
+- Most clay matchups have low I* — consistent with stable clay hierarchies
+- γ = 2.55 cuts off almost all of the distribution — very few clay bets pass the
+  threshold; explains the near-zero clay ROI in the MathSport paper
+
+Grass court (unimodal):
+- Single peak around I*≈1.0–1.5, no clear bimodal structure
+- Distribution falls off sharply after I*≈3
+- Likely driven by small sample — low evidence weights √(Σ) keep I* lower regardless
+  of graph structure
+- γ = 2.55 passes only the right tail
+
+Mean I* values (from text):
+
+| Surface | Men | Women |
+|---------|-----|-------|
+| Hard | 3.10 | 3.52 |
+| Clay | 1.86 | 1.67 |
+| Grass | 2.02 | 2.28 |
+| **Overall** | **2.71** | **3.02** |
+
+Women's tennis is 11.5% more intransitive overall. Hard has the highest I* (largest
+evidence weights from volume of matches played).
+
+**Intransitive cycle example (Figure 7 — Sakkari/Sabalenka subgraph, I*=8.54):**
+
+Four-player neighborhood: Sakkari (green), Sabalenka (blue), Cornet (red),
+Anisimova (pink). Edge weights (dominant → weaker):
+- Sakkari → Cornet: 0.57
+- Cornet → Sabalenka: 0.71
+- Sakkari → Sabalenka: 0.64 (direct)
+- Sakkari → Anisimova: 0.75
+- Anisimova → Sabalenka: 0.70
+
+Sakkari dominates everyone in this neighborhood. There is no simple A→B→C→A
+directed cycle visible. The I* = 8.54 score comes from Hodge decomposition of the
+full 4×4 logit-transformed advantage matrix — the cyclic structure is algebraic,
+not visually obvious as a triangle. This is important: high I* does not require
+a clean rock-paper-scissors cycle. Any configuration where the advantage matrix
+has substantial curl after removing the best-fitting transitive ranking qualifies.
+
+**Key observations:**
+
+1. *The bimodal distribution on hard court makes γ = 2.55 look principled in retrospect.*
+   It sits in the trough between two natural populations. Whether this was the
+   intended motivation or a post-hoc rationalization is unclear — the threshold was
+   optimized on validation ROI, not on distributional properties.
+
+2. *Clay's first-mode dominance explains the near-zero clay ROI in both papers.*
+   Almost no clay matchups pass γ = 2.55; the few that do are likely in the sparse
+   right tail where evidence is thin. Clay may be structurally uninteresting for
+   this strategy.
+
+3. *Grass's unimodal, low-I* distribution is puzzling given grass produced the
+   highest ROI in the MathSport paper (11.6%).* The MathSport paper used a
+   favourite-Kelly filter, not an intransitivity filter — grass ROI there came from
+   model accuracy on a small, Grand-Slam-dominated sample (67% Wimbledon), not from
+   intransitivity. These are different mechanisms.
+
+4. *High I* does not require an obvious cycle.* The Hodge decomposition finds cyclic
+   structure in any advantage matrix that cannot be fully explained by a transitive
+   ranking — including configurations like the Sakkari neighborhood where one player
+   dominates all others but the mutual dominance relationships among the remaining
+   players contain inconsistencies.
+
+5. *The evidence weighting is doing real work.* Without √(Σ weights), a single noisy
+   old match with a surprising result could generate high I(A_uv). The evidence
+   weighting means γ = 2.55 requires both cyclic structure AND sufficient historical
+   match evidence to support it.
