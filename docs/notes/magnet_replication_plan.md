@@ -341,6 +341,30 @@ while reducing bet volume to something actionable (target: ≤2–3 bets/week, ~
 - [ ] Note: tightening γ post-hoc on the test set is data snooping; the volume-constrained
       optimization must be done on validation only
 
+### Milestone 9: Alternative betting filters
+
+The MathSport paper used a favourite-only Kelly filter (bet only when p̂ > 0.5) and
+achieved 7.66% ROI on 1,074 bets. The arXiv paper replaced this with an intransitivity
+filter (I* ≥ 2.55) and achieved 3.26% ROI on 1,903 bets. The "optimized" filter
+produced lower ROI than the unoptimized one. This warrants a systematic comparison
+of filter approaches on the same model and test period.
+
+- [ ] Replicate MathSport favourite-Kelly filter on the arXiv paper's model and test
+      period — does the simpler filter outperform the intransitivity filter on identical
+      predictions?
+- [ ] Combine filters: intransitivity I* ≥ γ AND favourite (p̂ > 0.5) — the MathSport
+      paper's calibration concerns motivated favourites-only; if the arXiv model is
+      better calibrated (ε = 0.19 label smoothing), does the combination add value or
+      just reduce volume?
+- [ ] Surface-specific filters: MathSport paper showed clay ROI ≈ 0% and grass/hard
+      ROI > 10%. Test whether filtering to grass and hard only (dropping clay entirely)
+      improves ROI in the arXiv paper as it did in the MathSport paper.
+- [ ] Edge threshold filter: bet only when |p̂ − p_implied| exceeds some minimum —
+      distinct from intransitivity filter, focuses on raw model-market disagreement
+      regardless of graph structure.
+- [ ] All filter comparisons must use validation-set-only threshold selection; test-set
+      ROI curves are for reporting only, not selection.
+
 ### Milestone 5: WTA extension
 - [ ] Run full pipeline for WTA
 - [ ] Joint evaluation (ATP + WTA combined)
