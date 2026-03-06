@@ -542,6 +542,86 @@ prevented from strong convictions almost everywhere.
 
 ---
 
+## Section 6.0: Intransitivity and Market Efficiency (introduction)
+
+**Opening framing:** The arXiv paper acknowledges the MathSport paper achieved significant
+betting profits with an unoptimized configuration, but did not investigate *why*. Section 6
+investigates whether MagNet's advantage stems specifically from handling intransitive
+relationships — which traditional scalar rating systems (Elo, Bradley-Terry) cannot capture.
+
+**Summary of the MathSport paper:**
+
+*Data:* ATP only (no WTA). Grand Slams + Masters 1000 + 2 ATP 500s (Queen's Club and
+Halle Open added specifically for grass coverage). Jan 2016 – Sep 2024. 7,110 matches,
+426 players. Test set: 1,074 matches (Oct 2023 – Sep 2024).
+
+*Key methodological differences from the arXiv paper:*
+
+| | MathSport paper | arXiv paper |
+|--|----------------|-------------|
+| Surface transferability | None — graphs fully isolated | α matrix (0.01–0.45) |
+| Tournament prestige | None — all matches equal weight | φ by tier (0.69–0.94) |
+| Time decay | λ ≈ 0 (1-year-old match = 99% weight) | λ = 0.38 |
+| Architecture | K=1, 1 layer, 32 hidden | K=2, 2 layers, 64 hidden |
+| Training cadence | 75 epochs + early stopping, every snapshot | 150 epochs + 30 epochs quarterly |
+| Label smoothing | None | ε = 0.19 |
+| Data split | 65/15/10/10 | 85/15 walk-forward |
+| Direction averaging | Yes — averages (u→v) and (v→u) predictions | Not mentioned |
+| Betting filter | Favourites only (p̂ > 0.5), Kelly | Intransitivity I* ≥ 2.55, Kelly |
+| WTA | No | Yes |
+
+*Results (MathSport paper, Table 1):*
+
+| Surface | N | MagNet Acc | MagNet Brier | MagNet ROI | WElo ROI | PS Acc |
+|---------|---|-----------|-------------|-----------|---------|--------|
+| Clay | 314 | 67.5% | 0.216 | 0.24% | −20.21% | 73.6% |
+| Grass | 169 | 71.0% | 0.209 | 11.60% | −5.68% | 74.6% |
+| Hard | 591 | 63.8% | 0.221 | 10.87% | −2.14% | 69.9% |
+| **All** | **1,074** | **66.0%** | **0.218** | **7.66%** | **−9.24%** | **71.7%** |
+
+Significance test: pbs = 0.012 (probability random wagering matches or exceeds observed
+ROI, from 100,000 simulated trials of 1,074 random bets).
+
+*Live test (2025 clay season — Monte Carlo, Madrid, Rome Masters):*
+
+| Model | Accuracy | Brier | ROI |
+|-------|----------|-------|-----|
+| MagNet | 63.3% | 0.233 | 3.6% |
+| WElo | 63.7% | 0.222 | 2.2% |
+| Pinnacle | 67.2% | 0.211 | — |
+
+**Key observations:**
+
+1. *The "optimized" arXiv paper has lower ROI (3.26%) than the unoptimized MathSport
+   paper (7.66%).* The optimization improved Brier calibration but not betting ROI.
+   Different betting filters (favourite-Kelly vs. intransitivity filter), different test
+   periods, and different bet volumes (1,074 vs. 1,903) make direct comparison imperfect,
+   but the headline is notable — structural improvement to the model did not translate
+   to better betting returns.
+
+2. *Clay ROI was essentially zero (0.24%) in the MathSport paper,* consistent with
+   clay having the lowest I* in the arXiv paper. Stable hierarchies on clay → less
+   bookmaker mispricing → less exploitable edge.
+
+3. *Direction averaging (MathSport paper Eq. 4):* p̂_uv = (ẑ_uv + (1 − ẑ_vu)) / 2.
+   This averages predictions from both directed perspectives to reduce player-ordering
+   sensitivity. The arXiv paper does not mention this. Unknown whether it was retained
+   or dropped — worth checking during implementation.
+
+4. *WElo ROI is −9.24%* in the MathSport paper — substantially negative. Reinforces
+   that WElo's calibration issues, while better on Brier in some comparisons, translate
+   badly to variable-stake betting strategies.
+
+5. *The live test provides out-of-sample evidence* the MathSport result was not pure
+   overfitting — 3.6% ROI over three clay Masters events in 2025. Small sample but the
+   direction holds.
+
+6. *The arXiv paper's test set is 8× larger* (8,375 vs. 1,074 matches) — a more
+   reliable estimate of true steady-state performance, but also a much harder bar to
+   clear in absolute ROI terms.
+
+---
+
 ## Section 5: Results and Betting Simulation
 
 ### 5a. General Predictive Performance
@@ -588,6 +668,14 @@ Key observations from Table 4:
 **Calibration:** Paper reports strong calibration via calibration curves with recursive
 binning — predicted probabilities closely match observed outcome frequencies. Supports
 downstream use of raw model probabilities for Kelly sizing.
+
+---
+
+---
+
+**Paper terminology used throughout these notes:**
+- **arXiv paper** = Clegg & Cartlidge (2025a), arXiv:2510.20454 — *"Intransitive Player Dominance and Market Inefficiency in Tennis Forecasting: A Graph Neural Network Approach."* This is the paper we are replicating.
+- **MathSport paper** = Clegg & Cartlidge (2025b), MathSport International Proceedings pp. 50–56 — *"Tennis match outcome prediction using temporal directed graph neural networks."* This is the prior, unoptimized version referenced in Section 6.
 
 ---
 
