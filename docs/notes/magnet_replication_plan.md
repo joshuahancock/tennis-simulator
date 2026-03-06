@@ -302,7 +302,11 @@ Known from Section 1:
 - [ ] If > 1pp gap: investigate; if within 1pp: accept
 
 ### Milestone 4: Betting simulation
-- [ ] Read and implement Section 5 (intransitive complexity filter)
+- [ ] Search for existing Python Hodge decomposition libraries (e.g., hodgerank, gudhi,
+      networkx extensions) before implementing manually — use as validation baseline
+      even if we ultimately write our own
+- [ ] Implement intransitive complexity metric I* (common opponents → advantage matrix
+      → Hodge decomposition → evidence weighting; see Section 6.1 notes)
 - [ ] Kelly staking simulation
 - [ ] ROI comparison to paper's 3.26%
 

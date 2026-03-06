@@ -935,3 +935,47 @@ has substantial curl after removing the best-fitting transitive ranking qualifie
    old match with a surprising result could generate high I(A_uv). The evidence
    weighting means γ = 2.55 requires both cyclic structure AND sufficient historical
    match evidence to support it.
+
+**Implementation notes (Section 6.1 equations):**
+
+These four equations are **purely for betting selection** — they are entirely separate
+from the MagNet model. The pipeline has two independent branches sharing only the
+underlying dominance graph:
+
+```
+Build dominance graph
+        │
+        ├──► Train MagNet GNN ──► p̂ (match probability)
+        │
+        └──► Compute I* via Hodge decomposition ──► threshold filter
+                                                          │
+                                          Bet when I* ≥ 2.55 AND Kelly f* > 0
+```
+
+MagNet predictions don't depend on I* at all. This means MagNet can be fully built
+and validated against Table 4 accuracy/Brier results before a single line of Hodge
+decomposition is written. The betting simulation (Table 5, ROI) is a second phase.
+
+Per-equation implementation assessment:
+
+- *Eq 1 (common opponents):* Trivial — set intersection. NetworkX `common_neighbors()`
+  or two lines manually.
+
+- *Eq 2 (advantage matrix):* Manual but simple — `np.log(w / (1-w))`. Two issues:
+  (a) Dominance scores at exactly 0 or 1 produce ±∞ — need to clip to e.g. [0.01, 0.99].
+  (b) **Unspecified gap**: what value to assign A_uv[i,j] for pairs within the
+  {u, v} ∪ C_uv subgraph that have never played each other? Paper does not say.
+  Natural default is 0 (logit(0.5) = 0, "no dominance asserted"), but this is a
+  real implementation decision that could affect I* values.
+
+- *Eq 3 (Hodge decomposition):* **No standard library provides this.** NetworkX,
+  PyTorch Geometric, and scipy have no `hodge_decompose()` function. Requires manual
+  implementation (~30 lines of numpy): build graph Laplacian → solve Lφ = b via
+  least squares → reconstruct gradient component G_ij = φ_i − φ_j → curl = A − G →
+  compute Frobenius norms. Subgraphs are small (5–15 players), so performance is not
+  a concern. Main risk: getting index/edge orientation conventions right silently.
+  Search for existing libraries (hodgerank, gudhi, etc.) before implementing — see
+  Milestone 4.
+
+- *Eq 4 (evidence weighting):* Free — the Σ_k α·β·φ denominator is already computed
+  and stored when building the dominance score. Square root and multiply.
