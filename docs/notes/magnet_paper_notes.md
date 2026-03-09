@@ -979,3 +979,57 @@ Per-equation implementation assessment:
 
 - *Eq 4 (evidence weighting):* Free — the Σ_k α·β·φ denominator is already computed
   and stored when building the dominance score. Square root and multiply.
+
+---
+
+## Section 6.2: Model Robustness
+
+**Setup:** Test matches split into four bins by I* value. Bin 0 = no H2H history
+(I*=0). Bins 1–3 = tertiles of non-zero I* values. Brier score differences computed
+between MagNet and two benchmarks (PS and WElo) per bin.
+
+**Table 5:**
+
+| Bin | I* range | N | MagNet | PS | WElo | MagNet−PS | MagNet−WElo |
+|-----|----------|---|--------|-----|------|-----------|-------------|
+| 0 | 0 | 4,871 | 0.217 | 0.193 | 0.213 | +0.023 | +0.004 |
+| 1 | 0.1–2.0 | 1,168 | 0.209 | 0.190 | 0.200 | +0.019 | +0.008 |
+| 2 | 2.0–3.5 | 1,168 | 0.212 | 0.202 | 0.214 | +0.010 | −0.002 |
+| 3 | 3.5–9.6 | 1,168 | 0.216 | 0.209 | 0.218 | +0.007 | −0.002 |
+
+**Key claims:**
+- MagNet−PS gap narrows 68.3% from Bin 0 (+0.023) to Bin 3 (+0.007)
+- MagNet beats WElo in Bins 2 and 3 (−0.002 each)
+- Spearman ρ=+0.049, p<0.001 — monotonic narrowing trend statistically significant
+- Statistical method: cluster-robust bootstrap (10,000 resamples, players resampled
+  with replacement)
+- Conclusion: "Whilst the bookmaker maintains superior absolute accuracy, our model
+  demonstrates substantially greater robustness to intransitive matchups between players."
+
+**Key observations:**
+
+1. *Bin 0 is 58% of the test set.* 4,871 of 8,375 matches have I*=0 — no H2H history.
+   The majority of test matches fall here, and MagNet's advantage over WElo is essentially
+   zero (+0.004). The model's architectural contribution is absent for more than half of
+   all predictions.
+
+2. *γ=2.55 sits inside Bin 2, not at a bin boundary.* Bin 3 alone has 1,168 matches,
+   but 1,903 bets are placed. So the threshold captures the upper portion of Bin 2
+   (I* ∈ [2.55, 3.5]) plus all of Bin 3 — approximately the top 23% of all test matches.
+   This is a useful coherence check: γ=2.55 selects exactly the matches where MagNet
+   already outperforms WElo on Brier (Bins 2–3), making the threshold look principled
+   rather than arbitrary.
+
+3. *MagNet never closes the gap with PS.* Even in Bin 3 (highest intransitivity),
+   MagNet remains 0.007 behind PS on Brier. The betting ROI comes from Kelly sizing on
+   model-market disagreement, not from raw Brier superiority over the bookmaker.
+
+4. *ρ=+0.049 confirms the Spearman test is match-level, not bin-level.* If the test
+   were on the 4 bin means, ρ would be ±1.0 (the MagNet−PS differences are perfectly
+   monotone decreasing: +0.023, +0.019, +0.010, +0.007). ρ=0.049 is only consistent
+   with individual match-level computation (N=8,375) — a small but highly significant
+   correlation in the large-N, small-effect regime. The cluster-robust bootstrap
+   accounts for player-level dependence (multiple matches involving the same player
+   are not independent). The 4-bin table is a summary visualization of the same
+   pattern, not the unit of analysis for the test. Replication note: we must run
+   the Spearman test on individual match observations, not on the 4 bin means.
