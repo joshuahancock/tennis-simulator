@@ -344,6 +344,16 @@ while reducing bet volume to something actionable (target: ≤2–3 bets/week, ~
       (e.g., maximize ROI subject to ≤ N bets/year)
 - [ ] Note: tightening γ post-hoc on the test set is data snooping; the volume-constrained
       optimization must be done on validation only
+- [ ] Plot ROI curve separately for sub-periods (2023, 2024, H1 2025) — if the dip at γ≈2.7
+      appears consistently across sub-periods it's likely structural; if it moves around, it's
+      noise. A robustly profitable model should show qualitatively similar curve shape across
+      sub-periods even if absolute ROI levels vary.
+- [ ] Explore Kelly staking variants: (a) full compounding Kelly, (b) half-Kelly (f = 0.5·f*),
+      (c) quarter-Kelly — compare ROI and Sharpe ratio against the paper's reset-to-1
+      implementation. The authors chose reset-to-1 for clean academic reporting and to cap
+      exposure under uncertain edge estimates; fractional Kelly is standard professional
+      practice. If MagNet's calibration in the intransitive subset is strong, full or
+      half-Kelly may improve Sharpe at the cost of higher variance.
 
 ### Milestone 9: Alternative betting filters
 

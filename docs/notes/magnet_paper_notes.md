@@ -1033,3 +1033,113 @@ between MagNet and two benchmarks (PS and WElo) per bin.
    are not independent). The 4-bin table is a summary visualization of the same
    pattern, not the unit of analysis for the test. Replication note: we must run
    the Spearman test on individual match observations, not on the 4 bin means.
+
+---
+
+## Section 6.3: Betting Simulation
+
+**Full Table 6:**
+
+| Method | γ | Kelly bets | Kelly staked | Kelly return | Kelly profit | Kelly ROI | Kelly Sharpe | Unit bets | Unit staked | Unit return | Unit profit | Unit ROI | Unit Sharpe |
+|--------|---|-----------|-------------|-------------|-------------|-----------|-------------|----------|------------|------------|------------|----------|------------|
+| MagNet | 2.55 | 1,903 | 265.10 | 273.80 | 8.70 | **3.26%** | 0.61 | 2,063 | 2,063.00 | 2,086.50 | 23.50 | 1.14% | 0.48 |
+| MagNet | all | 7,705 | 1,129.60 | 1,067.50 | −62.10 | −5.49% | −1.93 | 8,375 | 8,375.00 | 8,237.50 | −137.50 | −1.64% | −1.35 |
+| WElo | 2.55 | 1,812 | 223.50 | 211.10 | −12.40 | −5.54% | −1.35 | 2,063 | 2,063.00 | 1,993.20 | −69.80 | −3.38% | −1.48 |
+| WElo | all | 7,465 | 1,058.20 | 1,005.70 | −52.50 | −4.96% | −2.15 | 8,375 | 8,375.00 | 8,218.80 | −156.20 | −1.87% | −1.51 |
+
+Caption note: γ = 2.55 filter contains 2,063 matches total (clay: 337, grass: 102, hard: 1,624;
+men: 963, women: 1,100).
+
+**Kelly staking implementation (Boshnakov et al. 2017):**
+
+The Kelly formula used:
+```
+f* = (p̂ · o − 1) / (o − 1)
+```
+where p̂ = model probability, o = decimal odds. This is equivalent to the standard Kelly
+formula in fractional odds notation: f = ((b+1)p − 1) / b.
+
+The authors follow the implementation from Boshnakov, Kharrat & McHale (2017), "A Bivariate
+Weibull Count Model for Forecasting Association Football Scores" (Salford Business School WP).
+That paper states: "We allow a maximum of 1 unit per bet and use the Kelly criterion to decide
+on what fraction of our 1 unit is staked. Effectively we reset our bankroll to 1 after each bet."
+
+**What "reset to 1" means in practice:** Standard Kelly is designed for a growing bankroll — you
+bet a fraction of your current wealth, so wins compound and losses shrink subsequent bets
+automatically. Reset Kelly treats each bet as if starting fresh with 1 unit. This removes path
+dependency: a losing streak does not shrink future stakes; a winning streak does not grow them.
+Each bet is independently sized as f* × 1 unit. Practical effect: total staked = Σ f*_i (not a
+fixed amount); ROI = total profit / Σ f*_i. Clean for reporting and avoids the ruin risk and
+volatility of compounding Kelly, but also forgoes the long-run wealth maximization that makes
+Kelly theoretically optimal.
+
+**Why the authors likely chose this implementation:**
+The Boshnakov paper treats it as a "protection" mechanism — it caps maximum exposure per bet at
+1 unit, guards against aggressive compounding when edge estimates may be uncertain, and makes
+the ROI statistic directly comparable across models (since all use the same base unit). For
+academic reporting, where the goal is to measure edge rather than simulate actual wealth
+accumulation, this is the right choice. Exploring alternative Kelly implementations (full
+compounding, fractional Kelly at various fractions, half-Kelly) is a live research avenue —
+see Kelly variants in Milestone 8.
+
+**Figure 8 (ROI vs. γ threshold):**
+
+Key observations from the plot:
+- At γ=0 (all bets), ROI ≈ −5% — consistent with the bookmaker vig
+- Sharp jump from negative to positive ROI around γ≈0.5–0.8 — likely driven by
+  excluding I*=0 matches (no shared opponents, no cyclic structure). This step alone
+  does a lot of work.
+- γ=2.55 (green dot) sits at ~3.26% on a local shoulder — not the maximum on the test curve
+- Test curve continues rising to ~9–10% ROI around γ≈4.3–4.5 (~554 bets), then
+  collapses sharply to ~−10% at γ=5.5 (~207 bets). Authors correctly did not chase
+  this — those estimates are unreliable with so few bets.
+- The curve is jagged at high γ because individual match outcomes move the ROI
+  meaningfully in a small sample — sampling noise, not structure.
+- Non-monotonic dip near γ≈2.7 between two humps. Unclear whether structural or noise.
+  Figure 8 is the realized test-set curve, not a smoothed simulation average.
+
+**Relationship to the 10,000 simulations:** Figure 8 shows the actual model's realized ROI
+at each threshold — one deterministic calculation per γ given fixed predictions and outcomes.
+The 10,000 simulations are a separate null distribution procedure used only to compute the
+p-value at γ=2.55. They are not shown in Figure 8. Overlaying the simulated fan against the
+model's curve would make the significance story more visually compelling but is not done.
+
+**Statistical significance:**
+- Kelly: p_bs = 0.005 (significant at α=0.025 Bonferroni)
+- Unit: p_bs = 0.022 (significant at α=0.025 after Bonferroni)
+These are marginal, not overwhelming. 1,903 bets over 2.5 years is a reasonable sample but
+the true edge CI is wide; the 3.26% headline could plausibly be anywhere from ~0% to ~6%.
+
+**Bet count discrepancy (Kelly 1,903 vs. unit 2,063):** Kelly only bets when f* > 0, which
+requires p̂ > 1/o (model probability exceeds bookmaker-implied). Unit staking bets whenever
+the model assigns p̂ > 0.5. The 160 difference are matches where the model favors a player
+but the odds don't support a positive Kelly fraction — the model has directional signal but
+the market has already priced most of it in. Those 160 extra unit bets drag down unit ROI.
+
+**WElo at γ=2.55 — Kelly staked 223.50 vs. MagNet's 265.10:** WElo's Kelly fractions are
+systematically smaller in intransitive matchups — WElo sees smaller edges against the market
+in these matches. WElo's probability in a cyclically complex matchup is driven by overall
+rating, which may be close to the odds-implied probability. MagNet finds larger perceived
+edges in these matches, bets more aggressively, and the bets go right. WElo's −5.54% Kelly
+ROI at the same threshold is the paper's sharpest evidence that the intransitivity filter is
+specifically capturing something MagNet sees that WElo cannot.
+
+**Key observations:**
+
+1. *The "reset to 1" Kelly implementation removes path dependency but not edge estimation
+   risk.* If MagNet's probabilities are miscalibrated in the intransitive subset, Kelly
+   fractions are wrong regardless of bankroll convention. The Section 5.1 calibration
+   check is thus load-bearing for this result.
+
+2. *The dip at γ≈2.7 is unexplained.* Could be noise from a specific cluster of matches
+   or structural (that I* range captures a match type where MagNet's edge is weaker).
+   Sub-period analysis would help distinguish: if the dip appears consistently across
+   2023, 2024, and H1 2025 sub-slices, it's likely structural; if it moves around, noise.
+   See Milestone 8 extension.
+
+3. *Kelly variants are an underexplored avenue.* Boshnakov-style reset Kelly is conservative
+   and clean for reporting. Full compounding Kelly would amplify both gains and losses.
+   Fractional Kelly (e.g., half-Kelly: f = 0.5 · f*) is the standard professional practice
+   that hedges against model miscalibration. The Sharpe ratio comparison between
+   implementations might favor fractional Kelly given the moderate calibration evidence.
+   Worth testing systematically — see Milestone 8 Kelly variants.
