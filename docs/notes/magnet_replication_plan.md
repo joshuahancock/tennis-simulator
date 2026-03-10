@@ -383,6 +383,24 @@ of filter approaches on the same model and test period.
 - [ ] Run full pipeline for WTA
 - [ ] Joint evaluation (ATP + WTA combined)
 
+### Milestone 10: Richer node features
+The paper's node features are height, weight, age, handedness, and degree centrality —
+essentially demographic/physical attributes plus graph structure. The authors explicitly
+flag more informative node features as a future direction. We have Sackmann serve/return
+stats that could substantially improve the node representations.
+
+- [ ] Add serve/return statistics as node features: first_in_pct, first_won_pct,
+      second_won_pct, ace_pct, df_pct, return_vs_first, return_vs_second — these are
+      already computed by src/data/player_stats.R and connect the MC model data pipeline
+      directly to the GNN
+- [ ] Use surface-specific stats where available (≥20 matches on surface); fall back
+      to overall stats otherwise — same threshold logic as the MC model
+- [ ] Evaluate whether richer node features improve Brier score on the test set vs.
+      the demographic-only baseline
+- [ ] Check whether the improvement (if any) is concentrated in the intransitive subset
+      (I* ≥ 2.55) — if serve/return stats help specifically in high-I* matchups, it
+      suggests stylistic information and intransitive structure are complementary signals
+
 ---
 
 ## Files

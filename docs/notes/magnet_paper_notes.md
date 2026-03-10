@@ -1143,3 +1143,36 @@ specifically capturing something MagNet sees that WElo cannot.
    that hedges against model miscalibration. The Sharpe ratio comparison between
    implementations might favor fractional Kelly given the moderate calibration evidence.
    Worth testing systematically — see Milestone 8 Kelly variants.
+
+---
+
+## Section 7: Conclusion
+
+Brief recap — no new results. Key items:
+
+**Limitations acknowledged:**
+1. Overall Brier trails Pinnacle significantly (0.215 vs. 0.196)
+2. Lacks explainability vs. simpler models
+3. Contingent on betting odds data quality
+
+**Future directions identified by authors:**
+1. More accurate intransitivity measures
+2. Testing in other individual sports with stylistic components
+3. Richer graph representations with multiple edge attributes
+4. **More informative node features** — current features are height, weight, age,
+   handedness, degree centrality. Authors explicitly flag this as an extension.
+   Directly relevant: Sackmann serve/return stats (first_in_pct, first_won_pct,
+   second_won_pct, ace_pct, df_pct) as node features would be the highest-leverage
+   improvement available to us and connect the MC model data to the GNN architecture.
+5. Incorporating bookmaker error signals into graph construction — using Pinnacle's
+   historical mispricing patterns as a signal encoded in the graph itself. Vague but
+   interesting; borders on closing-line-value analysis fed back into the model.
+
+**Notable absences from the limitations section:**
+- No acknowledgment of the γ overfitting concern (multiple testing on validation ROI)
+- No discussion of operational feasibility (Pinnacle bet limits, account restrictions,
+  15 bets/week is not trivially executable)
+
+**Overall:** Standard conclusion. The explicit call-out of node features validates the
+Sackmann extension direction. Paper ends honestly: edge found in a specific structural
+subset, not a global bookmaker-beating result.
