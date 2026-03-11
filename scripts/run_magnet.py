@@ -55,13 +55,14 @@ MATCH_DATA_PATH  = ROOT / "data/processed/magnet/match_data.csv"
 PLAYER_DATA_PATH = ROOT / "data/processed/magnet/player_data.csv"
 OUT_DIR          = ROOT / "data/processed/magnet"
 
-TRAIN_START = pd.Timestamp("2014-01-01")
-TEST_START  = pd.Timestamp("2023-01-01")
-TEST_END    = pd.Timestamp("2025-06-08")   # paper's exact cutoff
+TRAIN_START      = pd.Timestamp("2014-01-01")
+VALIDATION_START = pd.Timestamp("2019-08-29")  # paper's validation period start
+TEST_START       = pd.Timestamp("2023-01-01")
+TEST_END         = pd.Timestamp("2025-06-08")  # paper's exact cutoff
 
 INITIAL_EPOCHS  = 150
 FINETUNE_EPOCHS = 30
-FINETUNE_EVERY  = 38  # snapshots between fine-tunes
+FINETUNE_EVERY  = 38  # snapshots between fine-tunes (~quarterly)
 
 SPLIT_RATIO = 0.85   # fraction of history used for graph structure; 15% for training signal
 
@@ -145,7 +146,7 @@ def run_one_graph(
         train_signal = consumed.tail(n_train_signal)
 
         should_train = (
-            (not trained_once and snap_date >= TEST_START - pd.Timedelta(days=365)) or
+            (not trained_once and snap_date >= VALIDATION_START) or
             (trained_once and snapshot_count % FINETUNE_EVERY == 0)
         )
 
