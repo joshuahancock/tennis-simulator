@@ -58,9 +58,10 @@ def hodge_gradient_component(A: np.ndarray) -> np.ndarray:
     deg = W.sum(axis=1)
     L = np.diag(deg) - W
 
-    # Flow vector (antisymmetric): F[i,j] = A[i,j] - 0.5 where edges exist
-    # (logit-transform maps 0.5 → 0, so "no advantage" = 0 in flow space)
-    F = np.where(mask & mask.T, A - 0.5, 0.0)
+    # Flow vector (antisymmetric): use A directly.
+    # When A is logit-transformed (as passed from base_intransitivity), it is
+    # already antisymmetric and centred at 0 (logit(0.5) = 0).
+    F = np.where(mask & mask.T, A, 0.0)
 
     # RHS: b[i] = Σ_j F[i,j] * W[i,j]  (divergence of the flow)
     b = (F * W).sum(axis=1)
@@ -83,20 +84,26 @@ def base_intransitivity(A: np.ndarray) -> float:
     """
     Compute I(A_uv) for a local advantage matrix A (n × n, NaN for missing pairs).
 
-    Returns I ≥ 1 (1.0 when perfectly transitive).
+    Returns I ≥ 0.  Large when the subgraph is highly intransitive (much curl),
+    small when mostly transitive (gradient explains most of the flow).
     """
-    # Logit-transform the dominance scores
-    # A[i,j] in (0,1) → logit(A[i,j]) in (-∞, +∞)
-    # Missing pairs (NaN) remain NaN
+    # Logit-transform the dominance scores:
+    #   A[i,j] ∈ (0,1) → logit(A[i,j]) ∈ (-∞, +∞)
+    # logit(0.5) = 0 (neutral), logit is antisymmetric: logit(p) = -logit(1-p)
+    # Missing pairs remain NaN.
     with np.errstate(divide="ignore", invalid="ignore"):
-        A_logit = np.where(~np.isnan(A), np.log(A / (1 - A + 1e-15) + 1e-15), np.nan)
+        A_logit = np.where(
+            ~np.isnan(A),
+            np.log(np.clip(A, 1e-9, 1 - 1e-9) / (1 - np.clip(A, 1e-9, 1 - 1e-9))),
+            np.nan,
+        )
 
     G = hodge_gradient_component(A_logit)
 
     mask = ~np.isnan(A_logit)
     A_vals = np.where(mask & mask.T, A_logit, 0.0)
 
-    curl = A_vals - G                   # residual (curl) component
+    curl = A_vals - G               # residual (curl) component
     norm_curl = np.linalg.norm(curl)
     norm_grad = np.linalg.norm(G)
 
@@ -107,18 +114,23 @@ def base_intransitivity(A: np.ndarray) -> float:
 # Evidence weight
 # ============================================================================
 
-def evidence_weight(Z: np.ndarray, u: int, v: int) -> float:
+def subgraph_evidence(Z: np.ndarray, nodes: list) -> float:
     """
-    Return √(Z_sum) for the pair (u, v), where Z_sum is the total denominator
-    weight accumulated across all H2H matches for this pair.
+    Return √(total accumulated evidence) for a local subgraph.
 
-    This is the evidence term in I*(A_uv) = I(A_uv) · √(Z_sum).
+    The evidence is the sum of Z[i,j] across all distinct pairs (i,j) in the
+    subgraph that have H2H history (Z[i,j] > 0). This matches the paper's
+    intent: the evidence weight captures how densely evidenced the neighborhood
+    is, not just the direct H2H pair.
 
-    Z : (n, n) denominator weight matrix from GraphBuilder._Z[surface][gender]
+    Z : (n, n) denominator weight matrix (symmetric) from GraphBuilder._Z
+    nodes : list of global player indices in the subgraph
     """
-    # Z is symmetric: Z[u,v] == Z[v,u]
-    z_sum = Z[u, v]
-    return float(np.sqrt(max(z_sum, 0.0)))
+    total = 0.0
+    for a in range(len(nodes)):
+        for b in range(a + 1, len(nodes)):
+            total += Z[nodes[a], nodes[b]]
+    return float(np.sqrt(max(total, 0.0)))
 
 
 # ============================================================================
@@ -130,7 +142,7 @@ def compute_istar(
     v: int,
     D: np.ndarray,
     Z: np.ndarray,
-    max_opponents: int = 20,
+    max_opponents: int = 2,  # → 4-node subgraph (u, v + 2 top common opponents)
 ) -> float:
     """
     Compute I*(A_{u,v}) for match (u, v).
@@ -184,8 +196,12 @@ def compute_istar(
             if not np.isnan(d):
                 A_local[gi, gj] = d
 
-    I = base_intransitivity(A_local)
-    ev = evidence_weight(Z, u, v)
+    I  = base_intransitivity(A_local)
+    # Evidence weight = √(sum of Z[i,j] across all edges in the local subgraph).
+    # Paper note says 5–15 player subgraphs; capping common opponents at 5 (→ 7 nodes)
+    # keeps the evidence budget in the right range and prevents explosion for
+    # major players with many shared opponents.
+    ev = subgraph_evidence(Z, nodes.tolist())
 
     return I * ev
 
@@ -198,7 +214,7 @@ def compute_istar_batch(
     match_indices: np.ndarray,
     D: np.ndarray,
     Z: np.ndarray,
-    max_opponents: int = 20,
+    max_opponents: int = 2,
 ) -> np.ndarray:
     """
     Compute I* for a batch of matches.
