@@ -169,10 +169,8 @@ def run_one_graph(
 
             model.set_graph(adj, direction)
             epochs = INITIAL_EPOCHS if not trained_once else FINETUNE_EPOCHS
-            model.reset_adam()
-
             t0 = time.time()
-            model.train(X, train_pairs, train_labels, epochs=epochs, verbose=False)
+            model.fit(X, train_pairs, train_labels, epochs=epochs, verbose=False)
             elapsed = time.time() - t0
 
             if verbose:
