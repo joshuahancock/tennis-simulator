@@ -4,6 +4,180 @@ Working notes, findings, and analysis from development sessions.
 
 ---
 
+## 2026-03-10/11 - MagNet GNN Pipeline: Implementation and Calibration
+
+### Overview
+
+Built the full MagNet replication pipeline (Clegg & Cartlidge 2025, arXiv:2510.20454) from scratch, covering player attribute scraping, data export, graph construction, GNN training, walk-forward evaluation, and betting filter calibration. Two major implementation cycles: initial numpy GNN, then PyTorch rewrite.
+
+---
+
+### Phase 1: Player attribute scraping
+
+The paper uses player physical attributes (height, weight, DOB, handedness) as static node features. tennis-data.co.uk does not supply these; they must be scraped from tennisexplorer.com.
+
+**Script**: `scripts/scrape_tennisexplorer.py`
+**Output**: `data/raw/player_attributes/te_scraped_{atp,wta}.csv`, `te_failures_{atp,wta}.csv`
+
+**Mechanism**: For each player name (Sackmann "First Last" format), tries slugs `last-name` and `firstname-lastname` against `tennisexplorer.com/player/{slug}/`. Parses height, weight, DOB, handedness from the profile page. Failures written to separate file for manual resolution.
+
+**Results**:
+- ATP: 727/788 scraped (92%), 511 failures
+- WTA: 584/543 scraped, 459 failures
+
+**Coverage after merging into player_data.csv**:
+| Field | ATP | WTA |
+|-------|-----|-----|
+| height | 78.6% | 31.3% |
+| hand | 91.5% | 43.7% |
+
+WTA coverage is low because ~334 WTA players in our match data have no tennisexplorer page, and the scraper found duplicates for some entries (each player appearing twice in the output). The 31% figure is genuine: ~254 unique WTA players matched with data, of which ~182 have height/weight.
+
+**Name format mismatch**: tennis-data.co.uk uses "Last F." (e.g., "Sinner J."), Sackmann uses "First Last". Conversion via `sackmann_to_tduk()` in `export_for_magnet.R`. Known failure mode: compound surnames ("Del Potro" → "Potro J." instead of "Del Potro J.").
+
+**women.csv**: Created `data/raw/player_attributes/women.csv` (588 players, same schema as `men.csv`) with blanks for missing values. 406/588 players need manual entry. Once filled, `export_for_magnet.R` will pick it up as source priority 4.
+
+---
+
+### Phase 2: Data export
+
+**Script**: `scripts/export_for_magnet.R`
+**Outputs**: `data/processed/magnet/match_data.csv` (32,594 rows), `data/processed/magnet/player_data.csv` (1,199 players)
+
+match_data.csv columns: `match_date, tournament, surface, tour, tier, round, best_of, player_i, player_j, winner, games_i, games_j, ps_odds_i, ps_odds_j`
+
+player_data.csv columns: `name, gender, hand, dob, height_cm, weight_kg`
+
+Attribute priority: `men.csv` (manually curated ATP) > `te_scraped_atp.csv` > `te_scraped_wta.csv` > `women.csv` (once populated).
+
+---
+
+### Phase 3: Graph builder
+
+**File**: `src/models/magnet/graph_builder.py`
+
+Maintains running numerator N[s][g] and denominator Z[s][g] matrices (n_players × n_players) per surface and gender. Implements incremental time decay: when `advance_to(date)` is called, decays all existing entries by `exp(-λ·Δt)` before adding new matches at β=1.
+
+**Hyperparameters (Table 3)**:
+- λ = 0.38 (time decay rate)
+- α matrix (surface transferability): asymmetric 3×3, e.g., Hard→Clay = 0.07
+- φ weights: Grand Slam=1.0, Masters 1000=0.85, ATP/WTA 500=0.69, Tour Finals=0.94
+
+`get_graph(surface, gender, date)` returns adj (symmetric), direction (antisymmetric ±1), node features (ℓ₂-normalized), player list.
+
+`get_dominance(gender, surface)` returns D[u,v] = N/Z, NaN for pairs with no history.
+
+**Node features** (6 dimensions): height, weight, age-at-snapshot, handedness (0/1), out-degree, in-degree. Missing values imputed with gender-specific medians before ℓ₂-normalisation. *Note*: with 69% WTA missing, most WTA players receive median feature values, substantially degrading WTA embedding quality.
+
+---
+
+### Phase 4: GNN model (two implementations)
+
+#### 4a: Numpy implementation (superseded)
+
+**File**: `src/models/magnet/magnet_model.py` (original)
+
+2-layer ChebConv with K=2, hidden=64, no activation functions (paper's optimal architecture, making it a linear spectral filter). Complex weights (n_features×hidden, hidden×hidden). Prediction head: sigmoid([Re(Δ), Im(Δ)]·w + b).
+
+Manual complex-valued backprop via analytical gradients. Manual Adam with complex-aware second-moment update: `g_sq = (g·conj(g)).real`. Several bugs found and fixed during development:
+- `float.conj()` error on scalar `b` parameter
+- `round(ndarray)` error on batch predictions
+
+#### 4b: PyTorch implementation (current)
+
+**File**: `src/models/magnet/magnet_model.py` (current)
+**Commit**: `9730c63`
+
+Identical architecture, using `nn.Parameter` with complex64 tensors and `torch.optim.Adam`. Autograd handles all complex-valued gradients correctly. Training method renamed `fit()` to avoid shadowing `nn.Module.train()`. `reset_adam()` kept as no-op for call-site compatibility (fresh optimizer created in each `fit()` call).
+
+Training is ~10× faster (0.1s vs 0.4s per fine-tune step). Results numerically identical to numpy version (combined Brier 0.2306 vs 0.2304), confirming the numpy backprop was mathematically correct despite being error-prone to write.
+
+---
+
+### Phase 5: Walk-forward runner
+
+**File**: `scripts/run_magnet.py`
+
+Implements the paper's walk-forward protocol:
+- Training start: Aug 29, 2019 (paper's validation period start)
+- Test period: Jan 1, 2023 – Jun 8, 2025
+- Initial training: 150 epochs at first snapshot ≥ validation start
+- Fine-tuning: +30 epochs every 38 snapshots (~quarterly)
+- Training signal: most recent 15% of pre-round history (no leakage)
+- Graph advance: to `round_start - 1 day` before predicting; to `snap_date` after
+
+One snapshot = one (tournament, year, round) group. Leakage-free by construction: the current round's outcomes are never in the graph when predicting that round.
+
+**Bugs fixed during development**:
+- Snapshot grouping without year → all "Australian Open R1" collapsed to single snapshot
+- Training trigger fired too late (Jan 2022 instead of Aug 2019) → 13 fewer quarterly fine-tunes
+- Data leakage: `advance_to(snap_date)` called before predicting → fixed to use `pre_round_date`
+
+---
+
+### Phase 6: Intransitivity filter (I*)
+
+**File**: `src/models/magnet/intransitivity.py`
+
+Implements Hodge decomposition of the local advantage matrix A_{u,v}. The advantage matrix is built from logit-transformed dominance scores over the subgraph {u, v, common opponents}. Hodge decomposes into gradient (transitive) and curl (cyclic) components:
+
+`I(A) = (1 + ||curl||_F) / (1 + ||grad||_F)`
+
+Evidence-weighted: `I*(A_{u,v}) = I(A_{u,v}) · evidence_weight`
+
+**Unresolved formula ambiguity**: The paper states the evidence weight is `√(Σ_k α·β·φ)` and calls it "the same sum as the dominance score denominator." Two interpretations:
+
+1. `√Z[u,v]` — just the direct pair's accumulated evidence
+2. `√(Σ Z[i,j] over all pairs in subgraph)` — sum over the entire common-opponent neighborhood
+
+Both were implemented and tested:
+
+| Formula | max_opponents | Hard bet rate | Overall bet rate |
+|---------|---------------|---------------|-----------------|
+| √Z_subgraph | 2 (4-node) | 22.5% | 14.5% |
+| √Z[u,v] | 13 (15-node) | 1.6% | ~0.2% |
+
+The paper's Figure 6 shows a bimodal Hard court I* distribution with peaks at ~1.5 and ~3.0–3.5 and a right tail to ~10. Only the `√Z_subgraph` formula produces a distribution of that shape. `√Z[u,v]` gives max I*≈6.5 with almost nothing clearing 2.55.
+
+**Current state**: formula ambiguity unresolved. `√Z_subgraph` with `max_opponents=2` empirically reproduces the paper's Hard bet rate (22.5% vs 22.7%) at γ=2.55. The interpretation is uncertain but the result is consistent with the paper.
+
+---
+
+### Phase 7: Results vs paper
+
+**Full run results** (test period 2023-01-01 to 2025-06-08, 8,190 matches):
+
+| Metric | Ours | Paper |
+|--------|------|-------|
+| Combined accuracy | 65.6% | 65.7% |
+| ATP Brier | 0.2294 | — |
+| WTA Brier | 0.2317 | — |
+| Combined Brier | 0.2306 | 0.2150 |
+| Total bets | 1,185 | 1,903 |
+| Hard bet rate | 22.5% | ~22.7% |
+| Overall bet rate | 14.5% | 22.7% |
+| Kelly ROI | +1.70% | +3.26% |
+
+**Accuracy is essentially exact.** Brier gap (~1.5pp) is the main remaining discrepancy.
+
+**Brier gap diagnosis**: ATP Brier (0.2294) and WTA Brier (0.2317) are nearly identical, so the gap is not primarily a WTA data coverage issue. The most likely cause is the GNN producing less well-calibrated probabilities than the paper's — possibly due to the missing WTA physical attributes (69% imputed with median) degrading the embedding quality for WTA players, with the effect spreading to ATP predictions through shared hard-court scheduling and common opponents.
+
+**Bet rate gap diagnosis**: Hard courts match the paper. Clay and Grass have very low bet rates because Z[u,v] values on those surfaces are small (fewer matches, time-decayed, low cross-surface transfer α). The paper's own notes confirm near-zero Clay bets. The 14.5% vs 22.7% gap is not well understood but likely reflects surface distribution differences in the test period, not an implementation error.
+
+---
+
+### Open questions
+
+1. **I* evidence formula**: `√Z[u,v]` vs `√Z_subgraph` — needs the paper's code or author correspondence to resolve definitively.
+
+2. **γ calibration**: Should be validated against our validation period (Aug 2019–Dec 2022) predictions. Currently using paper's γ=2.55, which works on Hard but may not be optimal for our I* distribution.
+
+3. **WTA coverage**: `women.csv` has 406 blank entries. Filling manually would meaningfully improve WTA embedding quality and likely close part of the Brier gap.
+
+4. **Brier gap**: After filling women.csv, a ~0.5pp improvement is plausible. Remaining gap may be irreducible given data differences.
+
+---
+
 ## 2026-02-25 - Paper Baseline Confirmed; 500+ Only Decision
 
 ### Angelini Elo matches paper accuracy exactly

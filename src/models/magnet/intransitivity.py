@@ -118,13 +118,15 @@ def subgraph_evidence(Z: np.ndarray, nodes: list) -> float:
     """
     Return √(total accumulated evidence) for a local subgraph.
 
-    The evidence is the sum of Z[i,j] across all distinct pairs (i,j) in the
-    subgraph that have H2H history (Z[i,j] > 0). This matches the paper's
-    intent: the evidence weight captures how densely evidenced the neighborhood
-    is, not just the direct H2H pair.
+    Sums Z[i,j] across all distinct pairs (i,j) in the subgraph.
 
-    Z : (n, n) denominator weight matrix (symmetric) from GraphBuilder._Z
-    nodes : list of global player indices in the subgraph
+    NOTE: the paper formula states the evidence weight is √(Σ_k α·β·φ) and
+    describes it as "the same sum as the dominance score denominator for (u,v)",
+    suggesting √Z[u,v] only. However, using just Z[u,v] produces I* values far
+    too small for γ=2.55 to be useful (max I*≈6.5, <2% of pairs clear threshold)
+    and does not reproduce the bimodal Hard court distribution shown in Figure 6.
+    The subgraph sum formula reproduces the paper's Hard bet rate (22.5% vs 22.7%)
+    at γ=2.55. The correct interpretation remains unresolved.
     """
     total = 0.0
     for a in range(len(nodes)):
@@ -149,7 +151,8 @@ def compute_istar(
 
     Builds the local subgraph containing u, v, and their common opponents
     (players who have played both u and v), extracts the logit-transformed
-    advantage matrix, performs Hodge decomposition, and scales by evidence weight.
+    advantage matrix, performs Hodge decomposition, and scales by subgraph
+    evidence weight √(Σ Z[i,j]).
 
     Parameters
     ----------
@@ -160,7 +163,7 @@ def compute_istar(
 
     Returns
     -------
-    I* ≥ 0 (0 if pair has no H2H history, ≥ 1 otherwise)
+    I* ≥ 0 (0 if pair has no H2H history)
     """
     n_total = D.shape[0]
 
@@ -197,10 +200,6 @@ def compute_istar(
                 A_local[gi, gj] = d
 
     I  = base_intransitivity(A_local)
-    # Evidence weight = √(sum of Z[i,j] across all edges in the local subgraph).
-    # Paper note says 5–15 player subgraphs; capping common opponents at 5 (→ 7 nodes)
-    # keeps the evidence budget in the right range and prevents explosion for
-    # major players with many shared opponents.
     ev = subgraph_evidence(Z, nodes.tolist())
 
     return I * ev
