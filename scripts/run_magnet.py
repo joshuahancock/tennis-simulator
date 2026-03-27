@@ -31,6 +31,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
+
+# Reproducibility
+torch.manual_seed(42)
+np.random.seed(42)
 
 # Allow importing from src/
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +83,12 @@ def run_one_graph(
     player_data: pd.DataFrame,
     test_only: bool = False,
     verbose: bool = True,
+    eps: float = 0.19,
+    no_player_attrs: bool = False,
+    max_opponents: int = 2,
+    evidence_formula: str = "subgraph_sum",
+    h2h_require_both: bool = False,
+    opponent_selection: str = "top_z_sum",
 ) -> pd.DataFrame:
     """
     Full walk-forward evaluation for one (surface, gender) graph.
@@ -106,7 +117,7 @@ def run_one_graph(
         print(f"  {len(snapshots)} tournament-round snapshots")
 
     # Build graph incrementally up to test start
-    builder = GraphBuilder(g_matches, player_data)
+    builder = GraphBuilder(g_matches, player_data, no_player_attrs=no_player_attrs)
     model   = MagNetModel(n_features=6)
 
     predictions = []   # accumulated test-period predictions
@@ -170,7 +181,7 @@ def run_one_graph(
             model.set_graph(adj, direction)
             epochs = INITIAL_EPOCHS if not trained_once else FINETUNE_EPOCHS
             t0 = time.time()
-            model.fit(X, train_pairs, train_labels, epochs=epochs, verbose=False)
+            model.fit(X, train_pairs, train_labels, epochs=epochs, eps=eps, verbose=False)
             elapsed = time.time() - t0
 
             if verbose:
@@ -211,7 +222,11 @@ def run_one_graph(
                 odds_j = float(mrow["ps_odds_j"]) if not pd.isna(mrow.get("ps_odds_j", np.nan)) else np.nan
 
                 # Intransitivity
-                istar = compute_istar(ui, uj, D, Z_denom)
+                istar = compute_istar(ui, uj, D, Z_denom,
+                                     max_opponents=max_opponents,
+                                     evidence_formula=evidence_formula,
+                                     h2h_require_both=h2h_require_both,
+                                     opponent_selection=opponent_selection)
 
                 # Kelly
                 kf_i = kelly_fraction(p_match, odds_i) if not np.isnan(odds_i) else np.nan
@@ -343,6 +358,22 @@ def main():
     parser.add_argument("--gender",  choices=GENDERS + ["all"], default="all")
     parser.add_argument("--test-only", action="store_true",
                         help="Skip validation period, start predictions at TEST_START")
+    parser.add_argument("--eps", type=float, default=0.19,
+                        help="Label smoothing epsilon (default: 0.19)")
+    parser.add_argument("--no-player-attrs", action="store_true",
+                        help="Zero out static player attributes (height/weight/age/hand); use degree features only")
+    parser.add_argument("--max-opponents", type=int, default=2,
+                        help="Max common opponents per subgraph for I* (default: 2)")
+    parser.add_argument("--evidence-formula", default="subgraph_sum",
+                        choices=["subgraph_sum", "pair_only", "linear"],
+                        help="Evidence weight formula for I* (default: subgraph_sum)")
+    parser.add_argument("--h2h-require-both", action="store_true",
+                        help="Require H2H in both directions for common opponents")
+    parser.add_argument("--opponent-selection", default="top_z_sum",
+                        choices=["top_z_sum", "top_z_min"],
+                        help="How to rank common opponents when capping subgraph size")
+    parser.add_argument("--out-suffix", type=str, default="",
+                        help="Suffix appended to output filenames, e.g. '_mo5'")
     parser.add_argument("--verbose",   action="store_true", default=True)
     args = parser.parse_args()
 
@@ -367,16 +398,22 @@ def main():
                 surface, gender, matches, player_data,
                 test_only=args.test_only,
                 verbose=args.verbose,
+                eps=args.eps,
+                no_player_attrs=args.no_player_attrs,
+                max_opponents=args.max_opponents,
+                evidence_formula=args.evidence_formula,
+                h2h_require_both=args.h2h_require_both,
+                opponent_selection=args.opponent_selection,
             )
             if not pred_df.empty:
                 all_preds.append(pred_df)
-                out_path = OUT_DIR / f"predictions_{surface}_{gender}.csv"
+                out_path = OUT_DIR / f"predictions_{surface}_{gender}{args.out_suffix}.csv"
                 pred_df.to_csv(out_path, index=False)
                 print(f"  Saved: {out_path}")
 
     if all_preds:
         combined = pd.concat(all_preds, ignore_index=True)
-        out_all = OUT_DIR / "predictions_all.csv"
+        out_all = OUT_DIR / f"predictions_all{args.out_suffix}.csv"
         combined.to_csv(out_all, index=False)
         print(f"\nCombined: {out_all}  ({len(combined)} rows)")
 

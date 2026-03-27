@@ -70,7 +70,12 @@ class GraphBuilder:
         adj, direction, node_feats, player_index = builder.get_graph("Hard", "M")
     """
 
-    def __init__(self, match_data: pd.DataFrame, player_data: pd.DataFrame):
+    def __init__(
+        self,
+        match_data: pd.DataFrame,
+        player_data: pd.DataFrame,
+        no_player_attrs: bool = False,
+    ):
         """
         Parameters
         ----------
@@ -80,7 +85,12 @@ class GraphBuilder:
         player_data : DataFrame
             Output of export_for_magnet.R — columns include name, gender,
             hand, dob, height_cm, weight_kg.
+        no_player_attrs : bool
+            If True, zero out physical attribute features (height, weight, age,
+            handedness) in node feature vectors, retaining only degree features.
+            Used for the no-player-attrs ablation.
         """
+        self.no_player_attrs = no_player_attrs
         self.matches = match_data.copy()
         self.matches["match_date"] = pd.to_datetime(self.matches["match_date"])
         self.matches = self.matches.sort_values("match_date").reset_index(drop=True)
@@ -199,7 +209,7 @@ class GraphBuilder:
                     direction[v, u] = +1.0
                 # d_uv == 0.5 → no edge
 
-        node_features = self._build_node_features(gender, adj, snapshot_date)
+        node_features = self._build_node_features(gender, adj, direction, snapshot_date)
 
         return adj, direction, node_features, list(self._players[gender])
 
@@ -298,7 +308,7 @@ class GraphBuilder:
         return feats   # will add age and degrees later at snapshot time
 
     def _build_node_features(
-        self, gender: str, adj: np.ndarray, snapshot_date=None
+        self, gender: str, adj: np.ndarray, direction: np.ndarray, snapshot_date=None
     ) -> np.ndarray:
         """
         Build ℓ₂-normalized node feature matrix (n × d).
@@ -314,11 +324,9 @@ class GraphBuilder:
             snap_year = 2023  # fallback
         age_col = snap_year - static[:, 2]   # crude age from birth year
 
-        # Degree features
-        out_degree = (adj > 0).sum(axis=1).astype(float)  # adj is symmetric so directional info lost
-        # Use direction matrix for proper in/out
-        # But adj is passed in without direction; compute separately:
-        in_degree  = out_degree  # placeholder — refined below
+        # Degree features from direction matrix (antisymmetric: +1 = dominates, -1 = dominated)
+        out_degree = (direction > 0).sum(axis=1).astype(float)  # edges where this player dominates
+        in_degree  = (direction < 0).sum(axis=1).astype(float)  # edges where this player is dominated
 
         # Combine into feature matrix: [height, weight, age, hand, out_deg, in_deg]
         feats = np.column_stack([
@@ -329,6 +337,10 @@ class GraphBuilder:
             out_degree,    # out-degree (edges where this player dominates)
             in_degree,     # in-degree (edges where this player is dominated)
         ])  # (n, 6)
+
+        # Zero out player attributes (cols 0-3) if requested — keeps degree features only
+        if self.no_player_attrs:
+            feats[:, :4] = 0.0
 
         # ℓ₂ normalize each row
         norms = np.linalg.norm(feats, axis=1, keepdims=True)

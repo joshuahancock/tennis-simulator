@@ -114,25 +114,49 @@ def base_intransitivity(A: np.ndarray) -> float:
 # Evidence weight
 # ============================================================================
 
-def subgraph_evidence(Z: np.ndarray, nodes: list) -> float:
+def subgraph_evidence(
+    Z: np.ndarray,
+    nodes: list,
+    u_idx: int = 0,
+    v_idx: int = 1,
+    formula: str = "subgraph_sum",
+) -> float:
     """
-    Return √(total accumulated evidence) for a local subgraph.
+    Return the evidence weight for I* scaling.
 
-    Sums Z[i,j] across all distinct pairs (i,j) in the subgraph.
+    formula options
+    ---------------
+    "subgraph_sum"  (default) √(Σ Z[i,j] over all distinct pairs in subgraph)
+    "pair_only"     √(Z[u,v] + Z[v,u]) — direct pair evidence only
+    "linear"        Σ Z[i,j] over all distinct pairs (no sqrt)
 
     NOTE: the paper formula states the evidence weight is √(Σ_k α·β·φ) and
     describes it as "the same sum as the dominance score denominator for (u,v)",
-    suggesting √Z[u,v] only. However, using just Z[u,v] produces I* values far
-    too small for γ=2.55 to be useful (max I*≈6.5, <2% of pairs clear threshold)
-    and does not reproduce the bimodal Hard court distribution shown in Figure 6.
-    The subgraph sum formula reproduces the paper's Hard bet rate (22.5% vs 22.7%)
-    at γ=2.55. The correct interpretation remains unresolved.
+    suggesting "pair_only". However, "pair_only" produces I* values far too
+    small for γ=2.55 to yield the paper's 22.5% bet rate. "subgraph_sum"
+    reproduces the bet rate at γ=2.55. The correct interpretation is unresolved.
     """
-    total = 0.0
-    for a in range(len(nodes)):
-        for b in range(a + 1, len(nodes)):
-            total += Z[nodes[a], nodes[b]]
-    return float(np.sqrt(max(total, 0.0)))
+    u_global = nodes[u_idx]
+    v_global = nodes[v_idx]
+
+    if formula == "pair_only":
+        total = Z[u_global, v_global] + Z[v_global, u_global]
+        return float(np.sqrt(max(total, 0.0)))
+    elif formula == "linear":
+        total = 0.0
+        for a in range(len(nodes)):
+            for b in range(a + 1, len(nodes)):
+                total += Z[nodes[a], nodes[b]]
+        return float(max(total, 0.0))
+    elif formula == "subgraph_sum":
+        total = 0.0
+        for a in range(len(nodes)):
+            for b in range(a + 1, len(nodes)):
+                total += Z[nodes[a], nodes[b]]
+        return float(np.sqrt(max(total, 0.0)))
+    else:
+        raise ValueError(f"Unknown evidence formula: {formula!r}. "
+                         f"Expected 'subgraph_sum', 'pair_only', or 'linear'.")
 
 
 # ============================================================================
@@ -144,50 +168,58 @@ def compute_istar(
     v: int,
     D: np.ndarray,
     Z: np.ndarray,
-    max_opponents: int = 2,  # → 4-node subgraph (u, v + 2 top common opponents)
+    max_opponents: int = 2,
+    evidence_formula: str = "subgraph_sum",
+    h2h_require_both: bool = False,
+    opponent_selection: str = "top_z_sum",
 ) -> float:
     """
     Compute I*(A_{u,v}) for match (u, v).
 
-    Builds the local subgraph containing u, v, and their common opponents
-    (players who have played both u and v), extracts the logit-transformed
-    advantage matrix, performs Hodge decomposition, and scales by subgraph
-    evidence weight √(Σ Z[i,j]).
-
     Parameters
     ----------
-    u, v   : player indices
-    D      : (n, n) dominance matrix — D[u,v] ∈ (0,1) or NaN if no H2H
-    Z      : (n, n) denominator weight matrix
-    max_opponents : max common opponents to include (caps subgraph size)
+    u, v               : player indices
+    D                  : (n, n) dominance matrix — D[u,v] ∈ (0,1) or NaN if no H2H
+    Z                  : (n, n) denominator weight matrix
+    max_opponents      : max common opponents in subgraph (default 2)
+    evidence_formula   : "subgraph_sum" | "pair_only" | "linear" (see subgraph_evidence)
+    h2h_require_both   : if True, a player k is a common opponent only when D[u,k]
+                         and D[k,u] are BOTH non-NaN (and same for v); default False
+                         uses one-directional (either direction suffices)
+    opponent_selection : "top_z_sum" — rank by Z[u,k]+Z[v,k] (default)
+                         "top_z_min" — rank by min(Z[u,k], Z[v,k]) (bottleneck)
 
     Returns
     -------
     I* ≥ 0 (0 if pair has no H2H history)
     """
-    n_total = D.shape[0]
-
     # No H2H history → I* = 0
     if np.isnan(D[u, v]) and np.isnan(D[v, u]):
         return 0.0
 
-    # Find common opponents (players who have H2H with both u and v)
-    has_uv = ~np.isnan(D[u, :]) | ~np.isnan(D[:, u].T)
-    has_vu = ~np.isnan(D[v, :]) | ~np.isnan(D[:, v].T)
+    # Find common opponents
+    if h2h_require_both:
+        has_uv = ~np.isnan(D[u, :]) & ~np.isnan(D[:, u])
+        has_vu = ~np.isnan(D[v, :]) & ~np.isnan(D[:, v])
+    else:
+        has_uv = ~np.isnan(D[u, :]) | ~np.isnan(D[:, u])
+        has_vu = ~np.isnan(D[v, :]) | ~np.isnan(D[:, v])
+
     common = np.where(has_uv & has_vu)[0]
     common = common[common != u]
     common = common[common != v]
 
     # Limit subgraph size
     if len(common) > max_opponents:
-        # Keep those with most evidence (highest Z sum for u or v)
-        scores = Z[u, common] + Z[v, common]
+        if opponent_selection == "top_z_min":
+            scores = np.minimum(Z[u, common], Z[v, common])
+        else:  # "top_z_sum"
+            scores = Z[u, common] + Z[v, common]
         common = common[np.argsort(-scores)[:max_opponents]]
 
     # Build local node set: [u, v] + common opponents
     nodes = np.array([u, v] + sorted(common.tolist()))
     local_n = len(nodes)
-    node_map = {global_idx: local_idx for local_idx, global_idx in enumerate(nodes)}
 
     # Build local advantage matrix (NaN for missing pairs)
     A_local = np.full((local_n, local_n), np.nan)
@@ -200,7 +232,8 @@ def compute_istar(
                 A_local[gi, gj] = d
 
     I  = base_intransitivity(A_local)
-    ev = subgraph_evidence(Z, nodes.tolist())
+    ev = subgraph_evidence(Z, nodes.tolist(), u_idx=0, v_idx=1,
+                           formula=evidence_formula)
 
     return I * ev
 
@@ -214,6 +247,9 @@ def compute_istar_batch(
     D: np.ndarray,
     Z: np.ndarray,
     max_opponents: int = 2,
+    evidence_formula: str = "subgraph_sum",
+    h2h_require_both: bool = False,
+    opponent_selection: str = "top_z_sum",
 ) -> np.ndarray:
     """
     Compute I* for a batch of matches.
@@ -230,7 +266,9 @@ def compute_istar_batch(
     m = len(match_indices)
     istar = np.zeros(m, dtype=float)
     for k, (u, v) in enumerate(match_indices):
-        istar[k] = compute_istar(int(u), int(v), D, Z, max_opponents)
+        istar[k] = compute_istar(int(u), int(v), D, Z, max_opponents,
+                                 evidence_formula, h2h_require_both,
+                                 opponent_selection)
     return istar
 
 
