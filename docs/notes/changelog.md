@@ -4,6 +4,46 @@ This file tracks all code changes made to the simulator.
 
 ---
 
+## 2026-03-26 — Round 12 Referee Fixes (commit 38d2427)
+
+**`src/models/magnet/graph_builder.py`**
+- Fixed `in_degree = out_degree` placeholder bug. `_build_node_features`
+  now receives the `direction` matrix (antisymmetric ±1) and computes:
+  `out_degree = (direction > 0).sum(axis=1)` (edges where player dominates),
+  `in_degree = (direction < 0).sum(axis=1)` (edges where player is dominated).
+  Working-tree fix was applied 2026-03-12; this commit makes it permanent.
+- Promoted `no_player_attrs` from externally injected `_no_player_attrs`
+  attribute to a proper constructor parameter `no_player_attrs: bool = False`.
+
+**`src/models/magnet/intransitivity.py`**
+- `subgraph_evidence`: replaced silent `else: # "subgraph_sum"` fallthrough
+  with explicit `elif formula == "subgraph_sum"` + `else: raise ValueError(...)`.
+
+**`scripts/run_magnet.py`**
+- Updated `GraphBuilder(...)` call to pass `no_player_attrs=no_player_attrs`
+  at construction rather than injecting it post-hoc.
+
+---
+
+## 2026-03-12 — Round 9 Response: Trajectory Script Fixes
+
+**`analysis/trajectory/trajectory_analysis.R`**
+- Added PSW and PSL columns to the saved results tibble so downstream
+  scripts can access actual Pinnacle odds.
+- Fixed stale source path: `src/backtesting/07_elo_ratings.R` →
+  `src/models/elo/elo_ratings.R` (post-reorganisation path).
+- Fixed stale data path: `data/raw/tennis_betting/%d.xlsx` →
+  `data/raw/tennis_betting/atp/%d.xlsx`.
+
+**`analysis/trajectory/trajectory_contrarian.R`**
+- Fixed fair-odds bug: replaced `1/(1 - mkt_prob_w)` with actual Pinnacle
+  odds `PSL`/`PSW` in both in-sample and OOS sections.
+- Rewritten as a proper chronological walk-forward over 2014–2026 ATP
+  betting data (30,001 matches). Per-player sliding window (last 10 matches)
+  for O(1) trajectory lookup. Burn-in 2014; bets from 2015-01-01.
+
+---
+
 ## 2026-01-23 - Session Start
 
 ### Context
