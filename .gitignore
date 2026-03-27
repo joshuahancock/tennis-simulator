@@ -68,3 +68,6 @@ data/processed/*
 *.joblib
 *.h5
 /models/
+
+# Referee correspondence (managed outside version control)
+correspondence/
